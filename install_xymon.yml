@@ -1,0 +1,53 @@
+---
+
+- name: Install Xymon client
+
+  hosts: almalinux_servers
+
+  become: true
+
+  tasks:
+
+    - name: Install prerequisites
+
+      package:
+
+        name:
+
+        - epel-release
+
+        - redhat-lsb-core
+
+        - openssl
+
+        - openssl-devel
+
+        - gcc
+
+        - make
+
+        - autoconf
+
+        state: present
+
+
+
+    - name: Download Xymon client
+
+      get_url:
+
+        url: http://xymon.com/xymon/client/xymonclient-4.3.28-2.el8.x86_64.rpm
+
+        dest: /tmp/xymonclient-4.3.28-2.el8.x86_64.rpm
+
+        mode: 0644
+
+
+
+    - name: Install Xymon client
+
+      yum:
+
+        name: /tmp/xymonclient-4.3.28-2.el8.x86_64.rpm
+
+        state: present
