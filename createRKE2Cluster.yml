@@ -1,0 +1,42 @@
+---
+- name: Set up RKE2 Kubernetes cluster
+  hosts: all
+  become: yes
+  tasks:
+    - name: Install curl and tar
+      dnf:
+        name: ['curl', 'tar']
+        state: present
+
+    - name: Download RKE2 install script
+      get_url:
+        url: https://get.rke2.io
+        dest: /tmp/install_rke2.sh
+        mode: '0755'
+
+    - name: Install RKE2 server
+      command: /tmp/install_rke2.sh
+      environment:
+        INSTALL_RKE2_VERSION: 'v1.24.14+rke2r1'
+        INSTALL_RKE2_CHANNEL: 'stable'
+        INSTALL_RKE2_TYPE: 'server'
+      when: inventory_hostname == 'rke2-server'
+
+    - name: Get server node token
+      command: "cat /var/lib/rancher/rke2/server/node-token"
+      register: server_node_token
+      retries: 5
+      delay: 10
+      until: server_node_token is succeeded
+      when: inventory_hostname == 'rke2-server'
+
+    - name: Install RKE2 agent
+      command: /tmp/install_rke2.sh
+      environment:
+        INSTALL_RKE2_VERSION: 'v1.24.14+rke2r1'
+        INSTALL_RKE2_CHANNEL: 'stable'
+        INSTALL_RKE2_TYPE: 'agent'
+        K3S_URL: "https://{{ hostvars['rke2-server']['ansible_default_ipv4']['address'] }}:9345"
+        K3S_TOKEN: "{{ hostvars['rke2-server']['server_node_token']['stdout'] }}"
+      when: inventory_hostname != 'rke2-server'
+...
