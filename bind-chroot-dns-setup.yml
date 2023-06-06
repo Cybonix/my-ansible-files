@@ -1,0 +1,72 @@
+---
+- name: Configure BIND DNS in Chroot Jail on RHEL Server
+  hosts: 192.168.1.85
+  become: yes
+
+  tasks:
+          - name: Install BIND and BIND Utilities
+            package:
+                    name:
+                            - bind
+                            - bind-utils
+                    state: present
+
+          - name: Install BIND Chroot DNS Server
+            package:
+                    name: bind-chroot
+                    state: present
+
+          - name: Stop and Disable Named Service
+            service:
+                    name: named
+                    state: stopped
+            become: yes
+            ignore_errors: yes
+
+          - name: Disable Named Service
+            shell: systemctl disable named
+            become: yes
+            ignore_errors: yes
+
+          - name: Initialize Chroot Environment
+            shell: /usr/libexec/setup-named-chroot.sh /var/named/chroot on
+            become: yes
+
+          - name: Start named-chroot Service
+            service:
+                    name: named-chroot
+                    state: started
+            become: yes
+
+          - name: Create Symbolic Link for Named-Chroot Service
+            shell: ln -s '/usr/lib/systemd/system/named-chroot.service' '/etc/systemd/system/multi-user.target.wants/named-chroot.service'
+            become: yes
+            ignore_errors: yes
+
+          - name: Create Bind DNS Related Files in Chrooted Directory
+            file:
+                    path: "{{ item }}"
+                    state: touch
+            with_items:
+                    - /var/named/chroot/var/named/data/cache_dump.db
+                    - /var/named/chroot/var/named/data/named_stats.txt
+                    - /var/named/chroot/var/named/data/named_mem_stats.txt
+                    - /var/named/chroot/var/named/data/named.run
+            become: yes
+
+          - name: Create Dynamic Directory
+            file:
+                    path: /var/named/chroot/var/named/dynamic
+                    state: directory
+                    mode: 0777
+            become: yes
+
+          - name: Copy named.conf to Chrooted Bind Config Folder
+            copy:
+                    src: /etc/named.conf
+                    dest: /var/named/chroot/etc/named.conf
+                    owner: root
+                    group: root
+                    mode: 0644
+                    remote_src: yes
+            become: yes
