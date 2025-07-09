@@ -1,0 +1,39 @@
+---
+# defaults file for roles/ssh_hardening
+
+ssh_port: 22
+ssh_permit_root_login: "no"
+ssh_password_authentication: "no" # Enforces key-based authentication
+
+# ClientAliveInterval: seconds before server sends null packet to keep connection alive
+# ClientAliveCountMax: number of client alive messages before disconnecting client
+# Total timeout = ClientAliveInterval * ClientAliveCountMax
+ssh_client_alive_interval: 300 # 5 minutes
+ssh_client_alive_count_max: 3  # Results in 15 minutes timeout for idle sessions
+
+ssh_x11_forwarding: "no" # Disable X11 forwarding unless specifically needed
+ssh_max_auth_tries: 3    # Limit the number of authentication attempts per connection
+ssh_login_grace_time: "30s" # Time server waits for successful login before disconnecting
+ssh_allow_agent_forwarding: "yes" # Can be a security risk in some environments; set to "no" if not needed
+ssh_use_pam: "yes" # Recommended to be yes, especially on systems using PAM
+
+# Define lists of users or groups allowed to SSH.
+# If both are empty, it's typically assumed all users are allowed (depending on sshd_config defaults).
+# If either is non-empty, only users/groups in these lists will be allowed.
+ssh_allow_users: []
+# Example:
+# ssh_allow_users:
+#   - admin_user
+#   - another_user
+
+ssh_allow_groups: []
+# Example:
+# ssh_allow_groups:
+#   - sshusers
+#   - administrators
+
+# Warning: Changing the SSH port will require firewall adjustments
+# and client configuration updates (e.g., ssh -p {{ ssh_port }} user@host).
+# This role does not manage firewall rules by default.
+# Also, ensure the new port is allowed by SELinux if enabled on the system.
+# The role attempts to handle SELinux for RedHat family if port is changed.

@@ -1,0 +1,47 @@
+---
+# Example group_vars/all.yml
+# These variables apply to all hosts in the inventory.
+# You can override these in more specific group_vars (e.g., group_vars/webservers.yml)
+# or host_vars (e.g., host_vars/my_server.yml).
+
+# Variables for the 'common' role
+# common_timezone: "America/New_York" # Uncomment and set to your desired timezone
+# common_install_epel_release: true # Set to false if you do not want EPEL on RedHat systems
+
+# You can customize the list of packages to be installed by the 'common' role.
+# For example, to add 'iotop' and remove 'telnet' for RedHat systems:
+# common_packages_redhat:
+#   - vim-enhanced
+#   - git
+#   - htop
+#   - ncdu
+#   - bash-completion
+#   - tree
+#   - lsof
+#   - sysstat
+#   - iotop # Added package
+
+# For Debian systems:
+# common_packages_debian:
+#   - vim
+#   - git
+#   - htop
+#   - ncdu
+#   - bash-completion
+#   - tree
+#   - lsof
+#   - sysstat
+#   - iotop # Added package
+
+# common_motd_extra_message: "This server is part of the LAB environment."
+
+# Variables for other roles can also be defined here or in their respective
+# group_vars files.
+
+# Example for a hypothetical 'ssh_hardening' role (to be created)
+# ssh_port: 2222
+# ssh_permit_root_login: "no"
+# ssh_password_authentication: "no"
+# ssh_allow_users:
+#   - user1
+#   - user2

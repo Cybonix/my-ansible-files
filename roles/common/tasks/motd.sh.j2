@@ -1,0 +1,82 @@
+#!/bin/bash
+#
+# Custom MOTD script
+#
+
+# Get distribution information
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    OS_NAME=$PRETTY_NAME
+elif type lsb_release >/dev/null 2>&1; then
+    OS_NAME=$(lsb_release -si)
+elif [ -f /etc/lsb-release ]; then
+    . /etc/lsb-release
+    OS_NAME=$DISTRIB_ID
+elif [ -f /etc/debian_version ]; then
+    OS_NAME="Debian $(cat /etc/debian_version)"
+elif [ -f /etc/redhat-release ]; then
+    OS_NAME=$(cat /etc/redhat-release)
+else
+    OS_NAME=$(uname -s)
+fi
+
+# Get kernel version
+KERNEL_VERSION=$(uname -r)
+
+# Get system load
+LOAD_AVERAGE=$(uptime | awk -F'load average:' '{ print $2 }' | sed 's/^[ \t]*//;s/[ \t]*$//')
+
+# Get memory usage
+MEMORY_USAGE=$(free -m | awk 'NR==2{printf "%.2f%% (%s/%s MB)", $3*100/$2, $3, $2 }')
+
+# Get disk usage for /
+DISK_USAGE_ROOT=$(df -h / | awk 'NR==2{printf "%s (%s used / %s total)", $5, $3, $2}')
+
+# Get current logged in users
+LOGGED_IN_USERS=$(users | wc -w)
+WHO_USERS=$(who | awk '{print $1}' | sort -u | tr '\n' ' ')
+
+# Get IP Address (excluding loopback, preferring global scope)
+IP_ADDRESS=$(ip -4 addr show | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v '127.0.0.1' | head -n 1)
+if [ -z "$IP_ADDRESS" ]; then
+    IP_ADDRESS=$(ip -4 addr show | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n 1) # Fallback if no non-loopback
+fi
+
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+WHITE='\033[0;37m'
+NC='\033[0m' # No Color
+
+echo -e ""
+echo -e "${GREEN}Welcome to $(hostname -f)${NC}"
+echo -e ""
+echo -e "${YELLOW}System Information:${NC}"
+echo -e "  ${CYAN}OS Distribution:${NC} ${OS_NAME}"
+echo -e "  ${CYAN}Kernel Version:${NC}  ${KERNEL_VERSION}"
+echo -e "  ${CYAN}Hostname:${NC}        $(hostname -s)"
+echo -e "  ${CYAN}FQDN:${NC}            $(hostname -f)"
+echo -e "  ${CYAN}IP Address:${NC}      ${IP_ADDRESS:-N/A}"
+echo -e ""
+echo -e "${YELLOW}Resource Usage:${NC}"
+echo -e "  ${CYAN}CPU Load:${NC}        ${LOAD_AVERAGE}"
+echo -e "  ${CYAN}Memory Usage:${NC}    ${MEMORY_USAGE}"
+echo -e "  ${CYAN}Root Filesystem:${NC} ${DISK_USAGE_ROOT}"
+echo -e ""
+echo -e "${YELLOW}Users & Time:${NC}"
+echo -e "  ${CYAN}Current Users:${NC}   ${LOGGED_IN_USERS} (${WHO_USERS})"
+echo -e "  ${CYAN}System Time:${NC}     $(date)"
+echo -e "  ${CYAN}Uptime:${NC}          $(uptime -p | sed 's/up //')"
+echo -e ""
+echo -e "${PURPLE}This system is managed by Ansible.${NC}"
+
+if [ -n "{{ common_motd_extra_message }}" ]; then
+  echo -e ""
+  echo -e "${PURPLE}{{ common_motd_extra_message }}${NC}"
+fi
+echo -e ""

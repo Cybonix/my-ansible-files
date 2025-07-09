@@ -1,0 +1,44 @@
+---
+# tasks file for roles/common
+
+- name: Set timezone
+  ansible.builtin.timezone:
+    name: "{{ common_timezone }}"
+  notify: Reload systemd daemon if timezone changed # Handler needed for this
+
+- name: Install common packages (RedHat family)
+  ansible.builtin.yum:
+    name: "{{ common_packages_redhat }}"
+    state: present
+  when: ansible_os_family == "RedHat"
+
+- name: Install common packages (Debian family)
+  ansible.builtin.apt:
+    name: "{{ common_packages_debian }}"
+    state: present
+    update_cache: yes
+  when: ansible_os_family == "Debian"
+
+- name: Install EPEL repository for RedHat family (if specified)
+  ansible.builtin.yum:
+    name: epel-release
+    state: present
+  when:
+    - ansible_os_family == "RedHat"
+    - common_install_epel_release | bool
+  tags:
+    - packages
+    - epel
+
+- name: Template MOTD script
+  ansible.builtin.template:
+    src: motd.sh.j2
+    dest: /etc/profile.d/motd.sh
+    mode: '0755'
+
+# Placeholder for a handler that might be needed for timezone changes
+# This would typically go in a roles/common/handlers/main.yml file
+# - name: Reload systemd daemon if timezone changed
+#   ansible.builtin.systemd:
+#     daemon_reload: yes
+#   listen: "Reload systemd daemon if timezone changed"

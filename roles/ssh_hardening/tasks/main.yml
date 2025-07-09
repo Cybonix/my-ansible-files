@@ -1,0 +1,82 @@
+---
+# tasks file for roles/ssh_hardening
+
+- name: Harden SSH configuration
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    state: present
+    validate: 'sshd -t -f %s'
+  loop:
+    - { regexp: '^#?PermitRootLogin', line: 'PermitRootLogin {{ ssh_permit_root_login }}' }
+    - { regexp: '^#?PasswordAuthentication', line: 'PasswordAuthentication {{ ssh_password_authentication }}' }
+    - { regexp: '^#?Port', line: 'Port {{ ssh_port }}' }
+    - { regexp: '^#?ClientAliveInterval', line: 'ClientAliveInterval {{ ssh_client_alive_interval }}' }
+    - { regexp: '^#?ClientAliveCountMax', line: 'ClientAliveCountMax {{ ssh_client_alive_count_max }}' }
+    - { regexp: '^#?X11Forwarding', line: 'X11Forwarding {{ ssh_x11_forwarding }}' }
+    - { regexp: '^#?MaxAuthTries', line: 'MaxAuthTries {{ ssh_max_auth_tries }}' }
+    - { regexp: '^#?LoginGraceTime', line: 'LoginGraceTime {{ ssh_login_grace_time }}' }
+    - { regexp: '^#?AllowAgentForwarding', line: 'AllowAgentForwarding {{ ssh_allow_agent_forwarding }}' }
+    - { regexp: '^#?PermitEmptyPasswords', line: 'PermitEmptyPasswords no' } # Should always be no
+    - { regexp: '^#?ChallengeResponseAuthentication', line: 'ChallengeResponseAuthentication no' } # Usually for PAM, disable if not needed
+    - { regexp: '^#?UsePAM', line: 'UsePAM {{ ssh_use_pam }}' }
+  notify: Restart sshd
+  tags:
+    - ssh
+    - security
+
+- name: Ensure AllowUsers or AllowGroups is configured if specified
+  ansible.builtin.blockinfile:
+    path: /etc/ssh/sshd_config
+    block: |
+      {% if ssh_allow_users | length > 0 %}
+      AllowUsers {{ ssh_allow_users | join(' ') }}
+      {% endif %}
+      {% if ssh_allow_groups | length > 0 %}
+      AllowGroups {{ ssh_allow_groups | join(' ') }}
+      {% endif %}
+    marker: "# {mark} ANSIBLE MANAGED BLOCK FOR ALLOWUSERS/ALLOWGROUPS"
+    validate: 'sshd -t -f %s'
+  when: (ssh_allow_users | length > 0) or (ssh_allow_groups | length > 0)
+  notify: Restart sshd
+  tags:
+    - ssh
+    - security
+
+- name: Remove existing AllowUsers or AllowGroups if variables are empty
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^(AllowUsers|AllowGroups).*"
+    state: absent
+  when: (ssh_allow_users | length == 0) and (ssh_allow_groups | length == 0)
+  notify: Restart sshd
+  tags:
+    - ssh
+    - security
+
+# Note: Changing the SSH port will require firewall adjustments and
+# client configuration updates (e.g., ssh -p {{ ssh_port }} user@host).
+# This role does not manage firewall rules by default.
+
+# SELinux considerations for non-standard port (RedHat family)
+- name: Allow new SSH port in SELinux (if applicable and port changed)
+  ansible.builtin.command: "semanage port -a -t ssh_port_t -p tcp {{ ssh_port }}"
+  when:
+    - ansible_selinux.status == "enabled"
+    - ssh_port != 22
+    - ansible_os_family == "RedHat"
+  changed_when: true # semanage port returns 0 if already set, but we want to notify handler
+  notify: Restart sshd
+  ignore_errors: "{{ ansible_check_mode }}" # Might fail if semanage not installed, but -t should catch config errors
+  tags:
+    - ssh
+    - security
+    - selinux
+
+# Handlers will be defined in roles/ssh_hardening/handlers/main.yml
+# ---
+# - name: Restart sshd
+#   ansible.builtin.service:
+#     name: sshd # or ssh on Debian/Ubuntu
+#     state: restarted

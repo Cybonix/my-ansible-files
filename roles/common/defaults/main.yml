@@ -1,0 +1,35 @@
+---
+# defaults file for roles/common
+
+common_timezone: "Etc/UTC"
+
+# Default common packages for RedHat family systems
+common_packages_redhat:
+  - vim-enhanced
+  - git
+  - htop
+  - ncdu
+  - bash-completion
+  - tree
+  - telnet # Useful for network troubleshooting
+  - lsof
+  - sysstat # for iostat, mpstat, etc.
+
+# Default common packages for Debian family systems
+common_packages_debian:
+  - vim
+  - git
+  - htop
+  - ncdu
+  - bash-completion
+  - tree
+  - telnet # Useful for network troubleshooting
+  - lsof
+  - sysstat # for iostat, mpstat, etc.
+
+# Whether to install EPEL repository on RedHat family systems.
+# Set to true if you need packages from EPEL.
+common_install_epel_release: true
+
+# Extra message to display in the MOTD
+common_motd_extra_message: "For assistance, contact the IT department."

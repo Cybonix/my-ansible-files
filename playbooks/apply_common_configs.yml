@@ -1,0 +1,47 @@
+---
+- name: Apply common configurations and SSH hardening
+  hosts: all
+  become: yes
+  gather_facts: yes # Good practice to ensure facts are available for roles
+
+  roles:
+    - role: common
+      tags: common
+    - role: ssh_hardening
+      tags: ssh_hardening
+
+  # Example of how to override role variables at the playbook level:
+  # vars:
+  #   common_timezone: "America/Los_Angeles"
+  #   ssh_port: 22022
+  #   ssh_allow_users:
+  #     - your_user
+  #   # Ensure your user is in this list if you are testing ssh_allow_users
+  #   # and you are not connecting as root (which should be disabled by the role).
+
+  # Pre-tasks and Post-tasks can be added here if needed
+  # pre_tasks:
+  #   - name: Ensure sudo is installed (Debian family)
+  #     ansible.builtin.apt:
+  #       name: sudo
+  #       state: present
+  #     when: ansible_os_family == "Debian"
+
+  # post_tasks:
+  #   - name: Final system reboot if required by any role (use with caution)
+  #     ansible.builtin.reboot:
+  #     when: some_reboot_condition_is_met | default(false)
+
+# To run this playbook:
+# ansible-playbook playbooks/apply_common_configs.yml
+
+# To run only specific parts (tags):
+# ansible-playbook playbooks/apply_common_configs.yml --tags "common"
+# ansible-playbook playbooks/apply_common_configs.yml --tags "ssh_hardening"
+
+# Remember to update your inventory file (inventory/hosts.ini)
+# and ansible.cfg (or group_vars/all.yml) with your SSH user and private key.
+# If you change the SSH port via ssh_hardening role, you'll need to update your
+# Ansible inventory or use `ansible_port` for subsequent connections.
+# Example in inventory:
+# your_host ansible_host=your_ip_address ansible_port=22022 ansible_user=your_user

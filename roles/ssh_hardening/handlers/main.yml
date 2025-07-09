@@ -1,0 +1,9 @@
+---
+# handlers file for roles/ssh_hardening
+
+- name: Restart sshd
+  ansible.builtin.service:
+    name: "{{ ssh_service_name }}"
+    state: restarted
+  vars:
+    ssh_service_name: "{{ 'sshd' if ansible_os_family == 'RedHat' or ansible_distribution == 'AlmaLinux' or ansible_distribution == 'Rocky' else 'ssh' }}"
