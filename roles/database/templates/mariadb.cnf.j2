@@ -1,0 +1,41 @@
+[mysqld]
+# Basic settings
+bind-address = {{ mysql_bind_address }}
+port = {{ mysql_port }}
+socket = {{ mysql_socket }}
+datadir = {{ mysql_data_dir }}
+
+# Connection settings
+max_connections = {{ mysql_max_connections }}
+connect_timeout = 60
+wait_timeout = 120
+
+# Query cache
+query_cache_type = 1
+query_cache_size = {{ mysql_query_cache_size }}
+query_cache_limit = 1M
+
+# InnoDB settings
+default-storage-engine = innodb
+innodb_buffer_pool_size = {{ mysql_innodb_buffer_pool_size }}
+innodb_log_file_size = 64M
+innodb_file_per_table = 1
+innodb_open_files = 400
+innodb_io_capacity = 400
+innodb_flush_method = O_DIRECT
+
+# Logging
+log_error = /var/log/mariadb/mariadb.log
+slow_query_log = 1
+slow_query_log_file = /var/log/mariadb/mariadb-slow.log
+long_query_time = 5
+
+# Character sets
+character-set-server = utf8mb4
+collation-server = utf8mb4_unicode_ci
+
+[mysql]
+default-character-set = utf8mb4
+
+[client]
+default-character-set = utf8mb4

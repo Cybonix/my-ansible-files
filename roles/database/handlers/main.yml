@@ -1,0 +1,27 @@
+---
+# Handlers for database role
+
+- name: restart database
+  service:
+    name: "{{ database_service[database_type] }}"
+    state: restarted
+
+- name: reload database
+  service:
+    name: "{{ database_service[database_type] }}"
+    state: reloaded
+
+- name: restart mysql
+  service:
+    name: "{{ database_service.mysql }}"
+    state: restarted
+
+- name: restart mariadb
+  service:
+    name: "{{ database_service.mariadb }}"
+    state: restarted
+
+- name: restart postgresql
+  service:
+    name: "{{ database_service.postgresql }}"
+    state: restarted

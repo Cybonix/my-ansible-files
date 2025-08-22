@@ -1,0 +1,118 @@
+---
+# Default variables for monitoring role
+
+# Monitoring system type: xymon or prometheus
+monitoring_type: xymon
+
+# Server mode (true for monitoring server, false for client/agent)
+monitoring_server_mode: false
+
+# General monitoring settings
+monitoring_configure_firewall: true
+monitoring_user: xymon
+monitoring_group: xymon
+monitoring_log_dir: /var/log/monitoring
+
+# Service names and ports
+monitoring_services:
+  xymon:
+    - xymon-client
+  prometheus:
+    - prometheus
+    - node_exporter
+
+monitoring_ports:
+  xymon:
+    - "1984"  # Xymon client
+    - "80"    # Web interface
+  prometheus:
+    - "9090"  # Prometheus server
+    - "9100"  # Node Exporter
+
+# Xymon Configuration
+xymon_user: xymon
+xymon_group: xymon
+xymon_server_address: "192.168.1.50"  # Default monitoring server
+xymon_server_port: 1984
+
+# Xymon Client Settings
+xymon_client_package_url: "http://xymon.com/xymon/client/xymonclient-4.3.28-2.el8.x86_64.rpm"
+xymon_client_package_name: "xymonclient-4.3.28-2.el8.x86_64.rpm"
+xymon_client_config_dir: /etc/xymon
+xymon_client_scripts_dir: /usr/local/xymon/client/ext
+xymon_client_bin_dir: /usr/local/xymon/client/bin
+xymon_client_log_dir: /var/log/xymon
+xymon_client_service: xymon-client
+
+# Xymon Server Settings
+xymon_server_home: /opt/xymon
+xymon_server_config_dir: /opt/xymon/server/etc
+xymon_server_data_dir: /opt/xymon/server/data
+xymon_server_web_dir: /opt/xymon/server/web
+xymon_server_log_dir: /var/log/xymon
+xymon_server_service: xymon-server
+xymon_web_port: 80
+xymon_enable_web_interface: true
+xymon_install_from_source: true
+xymon_server_source_url: "https://sourceforge.net/projects/xymon/files/Xymon/4.3.28/xymon-4.3.28.tar.gz"
+xymon_server_source_name: "xymon-4.3.28.tar.gz"
+xymon_server_source_dir: "xymon-4.3.28"
+
+# Xymon Server Packages
+xymon_server_packages:
+  - gcc
+  - make
+  - rrdtool-devel
+  - openssl-devel
+  - pcre-devel
+  - libc-client-devel
+
+# Apache configuration directory (OS-specific)
+apache_config_dir: /etc/httpd/conf.d
+
+# Xymon Custom Scripts
+xymon_custom_scripts: []
+
+# Xymon Cron Jobs
+xymon_cron_jobs: []
+
+# Xymon Hosts Configuration
+xymon_hosts: []
+
+# Prometheus Configuration
+prometheus_user: prometheus
+prometheus_group: prometheus
+prometheus_home: /opt/prometheus
+prometheus_config_dir: /etc/prometheus
+prometheus_data_dir: /var/lib/prometheus
+prometheus_log_dir: /var/log/prometheus
+prometheus_bin_dir: /usr/local/bin
+prometheus_port: 9090
+prometheus_version: "2.45.0"
+prometheus_download_url: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/prometheus-{{ prometheus_version }}.linux-amd64.tar.gz"
+
+# Prometheus Features
+prometheus_install_node_exporter: true
+prometheus_enable_remote_write: false
+prometheus_retention_time: "15d"
+prometheus_storage_retention_size: "10GB"
+
+# Node Exporter Configuration
+node_exporter_port: 9100
+node_exporter_version: "1.6.0"
+node_exporter_bin_dir: /usr/local/bin
+node_exporter_download_url: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
+
+# Prometheus Targets
+prometheus_targets:
+  - targets:
+      - "localhost:9100"
+    labels:
+      job: "node_exporter"
+
+# Prometheus Rules
+prometheus_rules: []
+
+# Alert Manager Configuration (optional)
+alertmanager_enabled: false
+alertmanager_port: 9093

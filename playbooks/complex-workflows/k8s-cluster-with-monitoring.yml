@@ -1,0 +1,342 @@
+---
+- name: Deploy RKE2 Kubernetes Cluster with Monitoring
+  hosts: k8s_nodes
+  become: yes
+  vars:
+    # Cluster configuration
+    k8s_cluster_name: "{{ k8s_cluster_name | default('lab-cluster') }}"
+    k8s_version: "{{ k8s_version | default('v1.28.2+rke2r1') }}"
+    
+    # Monitoring configuration
+    monitoring_namespace: "{{ k8s_monitoring_namespace | default('monitoring') }}"
+    
+  pre_tasks:
+    - name: Validate Kubernetes deployment requirements
+      assert:
+        that:
+          - inventory_hostname in groups['k8s_nodes']
+          - k8s_cluster_name is defined
+          - ansible_default_ipv4 is defined
+        fail_msg: "Kubernetes deployment requirements not met. Check inventory and network configuration."
+
+    - name: Check if this is a master node
+      set_fact:
+        is_k8s_master: "{{ inventory_hostname in groups['k8s_masters'] | default([]) }}"
+
+    - name: Set first master as primary
+      set_fact:
+        is_primary_master: "{{ inventory_hostname == groups['k8s_masters'][0] if 'k8s_masters' in groups else false }}"
+
+  tasks:
+    # Phase 1: System Preparation
+    - name: Prepare system for Kubernetes
+      block:
+        - name: Install required packages
+          package:
+            name: "{{ k8s_required_packages }}"
+            state: present
+          vars:
+            k8s_required_packages:
+              - curl
+              - tar
+              - container-selinux
+              - iptables
+
+        - name: Disable swap
+          shell: swapoff -a
+          changed_when: false
+
+        - name: Remove swap from fstab
+          lineinfile:
+            path: /etc/fstab
+            regexp: '^.*swap.*$'
+            state: absent
+
+        - name: Configure kernel modules
+          modprobe:
+            name: "{{ item }}"
+            state: present
+          loop:
+            - br_netfilter
+            - ip_vs
+            - ip_vs_rr
+            - ip_vs_wrr
+            - ip_vs_sh
+
+        - name: Make kernel modules persistent
+          lineinfile:
+            path: /etc/modules-load.d/k8s.conf
+            line: "{{ item }}"
+            create: yes
+          loop:
+            - br_netfilter
+            - ip_vs
+            - ip_vs_rr
+            - ip_vs_wrr
+            - ip_vs_sh
+
+        - name: Configure sysctl for Kubernetes
+          sysctl:
+            name: "{{ item.key }}"
+            value: "{{ item.value }}"
+            state: present
+            reload: yes
+          loop:
+            - { key: "net.bridge.bridge-nf-call-iptables", value: "1" }
+            - { key: "net.bridge.bridge-nf-call-ip6tables", value: "1" }
+            - { key: "net.ipv4.ip_forward", value: "1" }
+
+        - name: Configure firewall for Kubernetes
+          firewalld:
+            port: "{{ item }}"
+            permanent: yes
+            state: enabled
+            immediate: yes
+          loop: "{{ k8s_master_ports if is_k8s_master else k8s_worker_ports }}"
+          when: ansible_os_family == "RedHat"
+          ignore_errors: yes
+
+    # Phase 2: RKE2 Installation
+    - name: Install RKE2
+      block:
+        - name: Download RKE2 install script
+          get_url:
+            url: https://get.rke2.io
+            dest: /tmp/install_rke2.sh
+            mode: '0755'
+
+        - name: Create RKE2 configuration directory
+          file:
+            path: "{{ rke2_config_dir }}"
+            state: directory
+            mode: '0755'
+
+        - name: Configure RKE2 server (master nodes)
+          template:
+            src: rke2-server-config.yaml.j2
+            dest: "{{ rke2_config_dir }}/config.yaml"
+            mode: '0600'
+          when: is_k8s_master
+
+        - name: Install RKE2 server
+          command: /tmp/install_rke2.sh
+          environment:
+            INSTALL_RKE2_VERSION: "{{ k8s_version }}"
+            INSTALL_RKE2_CHANNEL: "{{ k8s_channel }}"
+            INSTALL_RKE2_TYPE: "server"
+          when: is_k8s_master
+
+        - name: Start and enable RKE2 server
+          systemd:
+            name: rke2-server
+            state: started
+            enabled: yes
+            daemon_reload: yes
+          when: is_k8s_master
+
+        - name: Wait for RKE2 server to be ready
+          wait_for:
+            path: "{{ rke2_data_dir }}/server/node-token"
+            timeout: 300
+          when: is_k8s_master
+
+        - name: Get server node token
+          slurp:
+            src: "{{ rke2_data_dir }}/server/node-token"
+          register: server_node_token
+          when: is_primary_master
+
+        - name: Set server token fact
+          set_fact:
+            k8s_server_token: "{{ server_node_token.content | b64decode | trim }}"
+          when: is_primary_master
+
+        - name: Get server token from primary master
+          set_fact:
+            k8s_server_token: "{{ hostvars[groups['k8s_masters'][0]]['k8s_server_token'] }}"
+          when: not is_primary_master
+
+    # Phase 3: Worker Node Setup
+    - name: Setup RKE2 agent (worker nodes)
+      block:
+        - name: Configure RKE2 agent
+          template:
+            src: rke2-agent-config.yaml.j2
+            dest: "{{ rke2_config_dir }}/config.yaml"
+            mode: '0600'
+
+        - name: Install RKE2 agent
+          command: /tmp/install_rke2.sh
+          environment:
+            INSTALL_RKE2_VERSION: "{{ k8s_version }}"
+            INSTALL_RKE2_CHANNEL: "{{ k8s_channel }}"
+            INSTALL_RKE2_TYPE: "agent"
+
+        - name: Start and enable RKE2 agent
+          systemd:
+            name: rke2-agent
+            state: started
+            enabled: yes
+            daemon_reload: yes
+      when: not is_k8s_master
+
+    # Phase 4: kubectl Configuration
+    - name: Configure kubectl access
+      block:
+        - name: Create .kube directory
+          file:
+            path: "/root/.kube"
+            state: directory
+            mode: '0755'
+
+        - name: Copy kubeconfig
+          copy:
+            src: "{{ rke2_data_dir }}/server/cred/admin.kubeconfig"
+            dest: "/root/.kube/config"
+            mode: '0600'
+            remote_src: yes
+
+        - name: Add kubectl to PATH
+          lineinfile:
+            path: /root/.bashrc
+            line: 'export PATH=$PATH:{{ rke2_bin_dir }}'
+            create: yes
+
+        - name: Create kubectl alias
+          lineinfile:
+            path: /root/.bashrc
+            line: 'alias k=kubectl'
+            create: yes
+      when: is_primary_master
+
+    # Phase 5: Cluster Validation
+    - name: Validate cluster setup
+      block:
+        - name: Wait for nodes to be ready
+          shell: "{{ rke2_bin_dir }}/kubectl get nodes --no-headers | wc -l"
+          register: node_count
+          until: node_count.stdout | int >= groups['k8s_nodes'] | length
+          retries: 30
+          delay: 10
+
+        - name: Check node status
+          shell: "{{ rke2_bin_dir }}/kubectl get nodes"
+          register: kubectl_nodes
+          
+        - name: Display cluster nodes
+          debug:
+            msg: "{{ kubectl_nodes.stdout_lines }}"
+      when: is_primary_master
+
+    # Phase 6: Monitoring Setup
+    - name: Deploy monitoring stack
+      block:
+        - name: Create monitoring namespace
+          shell: "{{ rke2_bin_dir }}/kubectl create namespace {{ monitoring_namespace }} --dry-run=client -o yaml | {{ rke2_bin_dir }}/kubectl apply -f -"
+
+        - name: Deploy Xymon monitoring using existing role
+          include_role:
+            name: monitoring
+          vars:
+            monitoring_type: xymon
+            monitoring_server_mode: "{{ is_primary_master }}"
+            xymon_server_address: "{{ hostvars[groups['k8s_masters'][0]]['ansible_default_ipv4']['address'] }}"
+
+        - name: Create Kubernetes monitoring service
+          template:
+            src: k8s-monitoring-service.yaml.j2
+            dest: /tmp/k8s-monitoring-service.yaml
+          
+        - name: Apply monitoring service
+          shell: "{{ rke2_bin_dir }}/kubectl apply -f /tmp/k8s-monitoring-service.yaml"
+
+        - name: Deploy Node Exporter DaemonSet
+          template:
+            src: node-exporter-daemonset.yaml.j2
+            dest: /tmp/node-exporter-daemonset.yaml
+
+        - name: Apply Node Exporter
+          shell: "{{ rke2_bin_dir }}/kubectl apply -f /tmp/node-exporter-daemonset.yaml"
+      when: is_primary_master
+
+    # Phase 7: Security Hardening
+    - name: Apply security configurations
+      block:
+        - name: Create network policies
+          template:
+            src: "{{ item }}.yaml.j2"
+            dest: "/tmp/{{ item }}.yaml"
+          loop:
+            - default-deny-network-policy
+            - monitoring-network-policy
+
+        - name: Apply security policies
+          shell: "{{ rke2_bin_dir }}/kubectl apply -f /tmp/{{ item }}.yaml"
+          loop:
+            - default-deny-network-policy
+            - monitoring-network-policy
+
+        - name: Configure Pod Security Standards
+          shell: |
+            {{ rke2_bin_dir }}/kubectl label namespace {{ monitoring_namespace }} \
+              pod-security.kubernetes.io/enforce=restricted \
+              pod-security.kubernetes.io/audit=restricted \
+              pod-security.kubernetes.io/warn=restricted
+      when: is_primary_master
+
+    # Phase 8: Backup Configuration
+    - name: Setup cluster backup
+      block:
+        - name: Create backup script
+          template:
+            src: rke2-backup.sh.j2
+            dest: /usr/local/bin/rke2-backup.sh
+            mode: '0755'
+
+        - name: Configure backup cron job
+          cron:
+            name: "RKE2 etcd backup"
+            minute: "0"
+            hour: "2"
+            job: "/usr/local/bin/rke2-backup.sh"
+            user: root
+      when: is_primary_master
+
+  handlers:
+    - name: restart rke2-server
+      systemd:
+        name: rke2-server
+        state: restarted
+
+    - name: restart rke2-agent
+      systemd:
+        name: rke2-agent
+        state: restarted
+
+  post_tasks:
+    - name: Display cluster information
+      block:
+        - name: Get cluster info
+          shell: "{{ rke2_bin_dir }}/kubectl cluster-info"
+          register: cluster_info
+
+        - name: Get monitoring status
+          shell: "{{ rke2_bin_dir }}/kubectl get pods -n {{ monitoring_namespace }}"
+          register: monitoring_status
+          failed_when: false
+
+        - name: Display deployment summary
+          debug:
+            msg:
+              - "RKE2 Kubernetes cluster deployment completed!"
+              - "Cluster: {{ k8s_cluster_name }}"
+              - "Version: {{ k8s_version }}"
+              - "Nodes: {{ groups['k8s_nodes'] | length }}"
+              - "Masters: {{ groups['k8s_masters'] | default([]) | length }}"
+              - "Workers: {{ groups['k8s_workers'] | default([]) | length }}"
+              - "Monitoring: Xymon + Node Exporter"
+              - "Namespace: {{ monitoring_namespace }}"
+              - ""
+              - "Access cluster with:"
+              - "kubectl --kubeconfig {{ rke2_data_dir }}/server/cred/admin.kubeconfig get nodes"
+      when: is_primary_master

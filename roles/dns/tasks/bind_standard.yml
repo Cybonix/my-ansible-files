@@ -1,0 +1,125 @@
+---
+# Standard BIND DNS Server Configuration (Non-chroot)
+
+- name: Create BIND configuration directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ dns_user }}"
+    group: "{{ dns_group }}"
+    mode: '0755'
+  loop:
+    - "{{ dns_config_dir }}"
+    - "{{ dns_zone_dir }}"
+    - "{{ dns_log_dir }}"
+    - "{{ dns_data_dir }}"
+
+- name: Configure main named.conf
+  template:
+    src: named.conf.j2
+    dest: "{{ dns_config_dir }}/named.conf"
+    owner: root
+    group: "{{ dns_group }}"
+    mode: '0644'
+    backup: yes
+  notify: 
+    - check dns config
+    - restart dns
+
+- name: Configure named.conf.options
+  template:
+    src: named.conf.options.j2
+    dest: "{{ dns_config_dir }}/named.conf.options"
+    owner: root
+    group: "{{ dns_group }}"
+    mode: '0644'
+    backup: yes
+  notify: 
+    - check dns config
+    - restart dns
+
+- name: Configure named.conf.local
+  template:
+    src: named.conf.local.j2
+    dest: "{{ dns_config_dir }}/named.conf.local"
+    owner: root
+    group: "{{ dns_group }}"
+    mode: '0644'
+    backup: yes
+  notify: 
+    - check dns config
+    - restart dns
+
+- name: Create DNS zone files
+  template:
+    src: "{{ item.template | default('zone.j2') }}"
+    dest: "{{ dns_zone_dir }}/{{ item.filename }}"
+    owner: "{{ dns_user }}"
+    group: "{{ dns_group }}"
+    mode: '0644'
+    backup: yes
+  loop: "{{ dns_zones | default([]) }}"
+  notify: reload dns
+
+- name: Create reverse DNS zone files
+  template:
+    src: "{{ item.template | default('reverse_zone.j2') }}"
+    dest: "{{ dns_zone_dir }}/{{ item.filename }}"
+    owner: "{{ dns_user }}"
+    group: "{{ dns_group }}"
+    mode: '0644'
+    backup: yes
+  loop: "{{ dns_reverse_zones | default([]) }}"
+  notify: reload dns
+
+- name: Configure DNS logging
+  template:
+    src: named.conf.logging.j2
+    dest: "{{ dns_config_dir }}/named.conf.logging"
+    owner: root
+    group: "{{ dns_group }}"
+    mode: '0644'
+  notify: restart dns
+
+- name: Create log files
+  file:
+    path: "{{ dns_log_dir }}/{{ item }}"
+    state: touch
+    owner: "{{ dns_user }}"
+    group: "{{ dns_group }}"
+    mode: '0644'
+  loop:
+    - named.log
+    - query.log
+    - security.log
+    - update.log
+
+- name: Configure log rotation for DNS
+  template:
+    src: dns_logrotate.j2
+    dest: /etc/logrotate.d/named
+    mode: '0644'
+
+- name: Set proper permissions on BIND directories
+  file:
+    path: "{{ item }}"
+    owner: "{{ dns_user }}"
+    group: "{{ dns_group }}"
+    mode: '0755'
+    recurse: yes
+  loop:
+    - "{{ dns_zone_dir }}"
+    - "{{ dns_data_dir }}"
+    - "{{ dns_log_dir }}"
+
+- name: Ensure proper SELinux context for DNS files
+  sefcontext:
+    target: "{{ item.path }}"
+    setype: "{{ item.setype }}"
+    state: present
+  loop:
+    - { path: "{{ dns_zone_dir }}(/.*)?", setype: "named_zone_t" }
+    - { path: "{{ dns_config_dir }}(/.*)?", setype: "named_conf_t" }
+    - { path: "{{ dns_log_dir }}(/.*)?", setype: "named_log_t" }
+  when: ansible_os_family == "RedHat"
+  notify: restore selinux contexts

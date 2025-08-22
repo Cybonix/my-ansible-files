@@ -1,0 +1,16 @@
+[Unit]
+Description=Xymon Client
+After=network.target
+
+[Service]
+Type=forking
+User={{ xymon_user }}
+Group={{ xymon_group }}
+ExecStart={{ xymon_client_bin_dir }}/xymonclient --daemon
+ExecReload=/bin/kill -HUP $MAINPID
+PIDFile={{ xymon_client_log_dir }}/xymonclient.pid
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,119 @@
+---
+# BIND DNS Server in Chroot Jail Configuration
+# Based on existing bind-chroot-dns-setup.yml
+
+- name: Install BIND chroot package
+  package:
+    name: "{{ dns_chroot_package }}"
+    state: present
+
+- name: Stop and disable standard named service
+  service:
+    name: named
+    state: stopped
+    enabled: no
+  ignore_errors: yes
+
+- name: Initialize chroot environment
+  command: "{{ dns_chroot_setup_script }} {{ dns_chroot_dir }} on"
+  args:
+    creates: "{{ dns_chroot_dir }}/etc"
+  notify: restart dns
+
+- name: Create chroot DNS directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ dns_user }}"
+    group: "{{ dns_group }}"
+    mode: '0755'
+  loop:
+    - "{{ dns_chroot_dir }}/var/named/data"
+    - "{{ dns_chroot_dir }}/var/named/dynamic"
+    - "{{ dns_chroot_dir }}/var/named/slaves"
+    - "{{ dns_chroot_dir }}/var/log"
+    - "{{ dns_chroot_dir }}/etc"
+
+- name: Create BIND DNS related files in chrooted directory
+  file:
+    path: "{{ item }}"
+    state: touch
+    owner: "{{ dns_user }}"
+    group: "{{ dns_group }}"
+    mode: '0644'
+  loop:
+    - "{{ dns_chroot_dir }}/var/named/data/cache_dump.db"
+    - "{{ dns_chroot_dir }}/var/named/data/named_stats.txt"
+    - "{{ dns_chroot_dir }}/var/named/data/named_mem_stats.txt"
+    - "{{ dns_chroot_dir }}/var/named/data/named.run"
+
+- name: Set proper permissions on dynamic directory
+  file:
+    path: "{{ dns_chroot_dir }}/var/named/dynamic"
+    state: directory
+    owner: "{{ dns_user }}"
+    group: "{{ dns_group }}"
+    mode: '0770'
+
+- name: Configure named.conf for chroot
+  template:
+    src: named.conf.j2
+    dest: "{{ dns_chroot_dir }}/etc/named.conf"
+    owner: root
+    group: "{{ dns_group }}"
+    mode: '0644'
+    backup: yes
+  notify: 
+    - check dns config
+    - restart dns
+
+- name: Copy zone files to chroot environment
+  template:
+    src: "{{ item.template }}"
+    dest: "{{ dns_chroot_dir }}/var/named/{{ item.filename }}"
+    owner: "{{ dns_user }}"
+    group: "{{ dns_group }}"
+    mode: '0644'
+  loop: "{{ dns_zones | default([]) }}"
+  notify: reload dns
+
+- name: Configure named-chroot service
+  systemd:
+    name: named-chroot
+    enabled: yes
+    daemon_reload: yes
+
+- name: Copy resolv.conf template to chroot
+  template:
+    src: resolv.conf.j2
+    dest: "{{ dns_chroot_dir }}/etc/resolv.conf"
+    mode: '0644'
+  when: dns_configure_resolv | default(false)
+
+- name: Create named-chroot service override directory
+  file:
+    path: /etc/systemd/system/named-chroot.service.d
+    state: directory
+    mode: '0755'
+
+- name: Configure named-chroot service overrides
+  template:
+    src: named-chroot-override.conf.j2
+    dest: /etc/systemd/system/named-chroot.service.d/override.conf
+    mode: '0644'
+  notify:
+    - reload systemd
+    - restart dns
+
+- name: Ensure proper SELinux context for chroot directory
+  sefcontext:
+    target: "{{ dns_chroot_dir }}(/.*)?"
+    setype: named_zone_t
+    state: present
+  when: ansible_os_family == "RedHat"
+  notify: restore selinux contexts
+
+- name: Apply SELinux contexts
+  command: "restorecon -R {{ dns_chroot_dir }}"
+  when: ansible_os_family == "RedHat"
+  changed_when: false

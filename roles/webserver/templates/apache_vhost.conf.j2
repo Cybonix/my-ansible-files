@@ -1,0 +1,42 @@
+<VirtualHost *:{{ webserver_port }}>
+    ServerName {{ webserver_servername }}
+    {% if webserver_serveralias is defined %}
+    ServerAlias {{ webserver_serveralias }}
+    {% endif %}
+    DocumentRoot {{ webserver_document_root }}
+    
+    <Directory {{ webserver_document_root }}>
+        AllowOverride All
+        Require all granted
+    </Directory>
+    
+    ErrorLog logs/{{ webserver_servername }}_error.log
+    CustomLog logs/{{ webserver_servername }}_access.log combined
+    
+    {% if webserver_enable_ssl %}
+    # Redirect HTTP to HTTPS
+    Redirect permanent / https://{{ webserver_servername }}/
+    {% endif %}
+</VirtualHost>
+
+{% if webserver_enable_ssl %}
+<VirtualHost *:{{ webserver_ssl_port }}>
+    ServerName {{ webserver_servername }}
+    {% if webserver_serveralias is defined %}
+    ServerAlias {{ webserver_serveralias }}
+    {% endif %}
+    DocumentRoot {{ webserver_document_root }}
+    
+    <Directory {{ webserver_document_root }}>
+        AllowOverride All
+        Require all granted
+    </Directory>
+    
+    SSLEngine on
+    SSLCertificateFile /etc/ssl/certs/{{ webserver_servername }}.crt
+    SSLCertificateKeyFile /etc/ssl/private/{{ webserver_servername }}.key
+    
+    ErrorLog logs/{{ webserver_servername }}_ssl_error.log
+    CustomLog logs/{{ webserver_servername }}_ssl_access.log combined
+</VirtualHost>
+{% endif %}

@@ -1,0 +1,33 @@
+---
+# Variables for webserver group
+
+# Web server configuration
+webserver_type: apache  # or nginx
+webserver_port: 80
+webserver_ssl_port: 443
+webserver_enable_ssl: false
+webserver_configure_firewall: true
+webserver_deploy_default_page: true
+webserver_remove_default: true
+
+# Document root and server name will be set per host
+webserver_document_root: /var/www/html
+
+# PHP configuration (for LAMP stacks)
+install_php: true
+php_version: "8.1"
+php_modules:
+  - php-mysql
+  - php-xml
+  - php-mbstring
+  - php-curl
+  - php-zip
+  - php-gd
+
+# SSL settings (when enabled)
+ssl_cert_path: "/etc/ssl/certs"
+ssl_key_path: "/etc/ssl/private"
+ssl_dhparam_size: 2048
+
+# Security headers
+security_headers_enabled: true

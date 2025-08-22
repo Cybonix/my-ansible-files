@@ -1,0 +1,56 @@
+---
+# AlmaLinux specific variables
+
+# Package manager and repositories
+package_manager: dnf
+enable_epel: true
+enable_powertools: true
+enable_rpmfusion: false
+
+# Firewall
+firewall_service: firewalld
+
+# SELinux settings
+selinux_state: enforcing
+selinux_policy: targeted
+
+# System packages specific to AlmaLinux
+system_packages:
+  - epel-release
+  - dnf-utils
+  - redhat-lsb-core
+  - policycoreutils-python-utils
+  - setroubleshoot-server
+  - almalinux-release
+
+# Network time
+ntp_service: chronyd
+ntp_config_file: /etc/chrony.conf
+
+# Log files
+system_log_path: /var/log
+audit_log_path: /var/log/audit
+
+# User and group management
+default_shell: /bin/bash
+home_directory_mode: "0750"
+
+# AlmaLinux specific repositories
+almalinux_repos:
+  - name: "appstream"
+    enabled: true
+  - name: "baseos"
+    enabled: true
+  - name: "extras"
+    enabled: true
+
+# Security and compliance
+security_updates_only: false
+automatic_updates: false
+
+# Kernel parameters
+kernel_parameters:
+  - name: net.ipv4.ip_forward
+    value: 0
+  - name: net.ipv4.conf.all.rp_filter
+    value: 1

@@ -1,0 +1,39 @@
+---
+# Default variables for webserver role
+
+# Web server type: apache or nginx
+webserver_type: apache
+
+# Server configuration
+webserver_servername: "{{ ansible_fqdn | default('localhost') }}"
+webserver_serveralias: "www.{{ ansible_fqdn | default('localhost') }}"
+webserver_document_root: /var/www/html
+webserver_port: 80
+webserver_ssl_port: 443
+
+# Web server user/group (OS-specific, overridden in vars/)
+webserver_user: apache
+webserver_group: apache
+
+# Features
+webserver_deploy_default_page: true
+webserver_remove_default: true
+webserver_configure_firewall: true
+webserver_enable_ssl: false
+
+# Service names (OS-specific, overridden in vars/)
+webserver_service:
+  apache: httpd
+  nginx: nginx
+
+# Package names (OS-specific, overridden in vars/)
+webserver_packages:
+  apache:
+    - httpd
+  nginx:
+    - nginx
+
+# Configuration paths (OS-specific, overridden in vars/)
+apache_vhost_path: /etc/httpd/conf.d
+nginx_sites_available: /etc/nginx/sites-available
+nginx_sites_enabled: /etc/nginx/sites-enabled

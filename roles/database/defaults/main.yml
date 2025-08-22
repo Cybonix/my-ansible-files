@@ -1,0 +1,85 @@
+---
+# Default variables for database role
+
+# Database type: mysql, mariadb, or postgresql
+database_type: mariadb
+
+# Security settings
+database_root_password: ""  # Set this in group_vars or host_vars
+database_remove_anonymous_users: true
+database_remove_test_database: true
+database_disallow_root_remote: true
+
+# Configuration
+database_configure_firewall: true
+database_custom_config: true
+
+# Default ports
+database_ports:
+  mysql: 3306
+  mariadb: 3306
+  postgresql: 5432
+
+# Service names (OS-specific, overridden in vars/)
+database_service:
+  mysql: mysqld
+  mariadb: mariadb
+  postgresql: postgresql
+
+# Package names (OS-specific, overridden in vars/)
+database_packages:
+  mysql:
+    - mysql-server
+  mariadb:
+    - mariadb-server
+  postgresql:
+    - postgresql-server
+
+database_client_packages:
+  mysql:
+    - mysql
+  mariadb:
+    - mariadb
+  postgresql:
+    - postgresql
+
+database_python_packages:
+  mysql:
+    - python3-PyMySQL
+  mariadb:
+    - python3-PyMySQL
+  postgresql:
+    - python3-psycopg2
+
+# Configuration files (OS-specific, overridden in vars/)
+mysql_config_file: /etc/my.cnf
+postgresql_config_file: /var/lib/pgsql/data/postgresql.conf
+postgresql_hba_file: /var/lib/pgsql/data/pg_hba.conf
+
+# Data directories (OS-specific)
+mysql_data_dir: /var/lib/mysql
+postgresql_data_dir: /var/lib/pgsql/data
+
+# Socket files (OS-specific)
+mysql_socket: /var/lib/mysql/mysql.sock
+
+# Setup commands (OS-specific)
+postgresql_setup_command: postgresql-setup initdb
+
+# Default databases and users (empty by default)
+database_databases: []
+database_users: []
+
+# MySQL/MariaDB configuration options
+mysql_bind_address: "127.0.0.1"
+mysql_port: 3306
+mysql_max_connections: 151
+mysql_query_cache_size: "16M"
+mysql_innodb_buffer_pool_size: "128M"
+
+# PostgreSQL configuration options
+postgresql_listen_addresses: "localhost"
+postgresql_port: 5432
+postgresql_max_connections: 100
+postgresql_shared_buffers: "128MB"
+postgresql_effective_cache_size: "4GB"

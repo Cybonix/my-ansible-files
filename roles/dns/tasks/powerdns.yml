@@ -1,0 +1,97 @@
+---
+# PowerDNS Server Configuration
+
+- name: Install PowerDNS packages
+  package:
+    name: "{{ powerdns_packages }}"
+    state: present
+
+- name: Install PowerDNS backend packages
+  package:
+    name: "{{ powerdns_backend_packages[powerdns_backend] }}"
+    state: present
+
+- name: Create PowerDNS configuration directory
+  file:
+    path: "{{ powerdns_config_dir }}"
+    state: directory
+    owner: root
+    group: "{{ powerdns_group }}"
+    mode: '0755'
+
+- name: Configure PowerDNS main configuration
+  template:
+    src: pdns.conf.j2
+    dest: "{{ powerdns_config_dir }}/pdns.conf"
+    owner: root
+    group: "{{ powerdns_group }}"
+    mode: '0640'
+    backup: yes
+  notify: restart powerdns
+
+- name: Configure PowerDNS backend
+  template:
+    src: "pdns_{{ powerdns_backend }}.conf.j2"
+    dest: "{{ powerdns_config_dir }}/pdns.d/{{ powerdns_backend }}.conf"
+    owner: root
+    group: "{{ powerdns_group }}"
+    mode: '0640'
+  notify: restart powerdns
+  when: powerdns_backend != "bind"
+
+- name: Create PowerDNS database (MySQL/PostgreSQL)
+  block:
+    - name: Create PowerDNS database
+      mysql_db:
+        name: "{{ powerdns_db_name }}"
+        state: present
+      when: powerdns_backend == "mysql"
+
+    - name: Create PowerDNS database user
+      mysql_user:
+        name: "{{ powerdns_db_user }}"
+        password: "{{ powerdns_db_password }}"
+        priv: "{{ powerdns_db_name }}.*:ALL"
+        state: present
+      when: powerdns_backend == "mysql"
+
+    - name: Import PowerDNS MySQL schema
+      mysql_db:
+        name: "{{ powerdns_db_name }}"
+        state: import
+        target: "{{ powerdns_schema_file }}"
+      when: powerdns_backend == "mysql"
+  when: powerdns_backend in ["mysql", "postgresql"]
+
+- name: Configure PowerDNS zones (file backend)
+  template:
+    src: "{{ item.template | default('powerdns_zone.j2') }}"
+    dest: "{{ powerdns_zone_dir }}/{{ item.filename }}"
+    owner: "{{ powerdns_user }}"
+    group: "{{ powerdns_group }}"
+    mode: '0644'
+  loop: "{{ dns_zones | default([]) }}"
+  notify: restart powerdns
+  when: powerdns_backend == "bind"
+
+- name: Start and enable PowerDNS service
+  service:
+    name: "{{ powerdns_service }}"
+    state: started
+    enabled: yes
+
+- name: Configure PowerDNS API (if enabled)
+  lineinfile:
+    path: "{{ powerdns_config_dir }}/pdns.conf"
+    regexp: "^api="
+    line: "api=yes"
+  when: powerdns_enable_api | default(false)
+  notify: restart powerdns
+
+- name: Configure PowerDNS web interface (if enabled)
+  lineinfile:
+    path: "{{ powerdns_config_dir }}/pdns.conf"
+    regexp: "^webserver="
+    line: "webserver=yes"
+  when: powerdns_enable_webserver | default(false)
+  notify: restart powerdns

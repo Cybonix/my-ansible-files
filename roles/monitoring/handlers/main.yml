@@ -1,0 +1,35 @@
+---
+# Handlers for monitoring role
+
+- name: reload systemd
+  systemd:
+    daemon_reload: yes
+
+- name: restart xymon client
+  service:
+    name: "{{ xymon_client_service }}"
+    state: restarted
+
+- name: restart xymon server
+  service:
+    name: "{{ xymon_server_service }}"
+    state: restarted
+
+- name: reload xymon config
+  command: "{{ xymon_server_home }}/bin/xymon localhost 'config {{ xymon_server_config_dir }}/hosts.cfg'"
+  failed_when: false
+
+- name: restart prometheus
+  service:
+    name: prometheus
+    state: restarted
+
+- name: restart node exporter
+  service:
+    name: node_exporter
+    state: restarted
+
+- name: restart apache
+  service:
+    name: "{{ apache_service }}"
+    state: restarted

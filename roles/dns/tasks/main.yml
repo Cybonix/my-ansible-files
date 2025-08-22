@@ -1,0 +1,96 @@
+---
+# DNS Server Role - Main Tasks
+# Based on existing BIND chroot setup with extended functionality
+
+- name: Include OS-specific variables
+  include_vars: "{{ ansible_os_family }}.yml"
+
+- name: Install DNS server packages
+  package:
+    name: "{{ dns_packages }}"
+    state: present
+
+- name: Install DNS utilities
+  package:
+    name: "{{ dns_utils_packages }}"
+    state: present
+
+- name: Create DNS user and group
+  group:
+    name: "{{ dns_group }}"
+    system: yes
+  
+- name: Create DNS user
+  user:
+    name: "{{ dns_user }}"
+    group: "{{ dns_group }}"
+    home: "{{ dns_home_dir }}"
+    shell: /sbin/nologin
+    system: yes
+    create_home: no
+
+- name: Include BIND chroot tasks
+  include_tasks: bind_chroot.yml
+  when: 
+    - dns_type == "bind"
+    - dns_chroot_enabled | bool
+
+- name: Include standard BIND tasks
+  include_tasks: bind_standard.yml
+  when: 
+    - dns_type == "bind"
+    - not dns_chroot_enabled | bool
+
+- name: Include PowerDNS tasks
+  include_tasks: powerdns.yml
+  when: dns_type == "powerdns"
+
+- name: Configure DNS zone files
+  template:
+    src: "{{ item.template }}"
+    dest: "{{ dns_zone_dir }}/{{ item.filename }}"
+    owner: "{{ dns_user }}"
+    group: "{{ dns_group }}"
+    mode: '0644'
+    backup: yes
+  loop: "{{ dns_zones }}"
+  notify: 
+    - reload dns
+    - check dns config
+  when: dns_zones is defined
+
+- name: Configure firewall for DNS
+  firewalld:
+    service: dns
+    permanent: yes
+    state: enabled
+    immediate: yes
+  when: ansible_os_family == "RedHat" and dns_configure_firewall | bool
+  ignore_errors: yes
+
+- name: Configure UFW for DNS (Ubuntu)
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: "{{ item.split('/')[1] if '/' in item else 'udp' }}"
+  loop:
+    - "53/udp"
+    - "53/tcp"
+  when: ansible_os_family == "Debian" and dns_configure_firewall | bool
+  ignore_errors: yes
+
+- name: Start and enable DNS service
+  service:
+    name: "{{ dns_service }}"
+    state: started
+    enabled: yes
+
+- name: Test DNS resolution
+  command: "dig @{{ ansible_default_ipv4.address }} {{ dns_test_domain | default('google.com') }}"
+  register: dns_test
+  failed_when: false
+  changed_when: false
+
+- name: Display DNS test results
+  debug:
+    msg: "DNS test {{ 'passed' if dns_test.rc == 0 else 'failed' }}"

@@ -1,0 +1,273 @@
+---
+- name: Deploy Complete LAMP Stack
+  hosts: lamp_stack
+  become: yes
+  vars:
+    # Application configuration
+    app_name: "webapp"
+    app_domain: "{{ app_name }}.lab"
+    app_document_root: "/var/www/{{ app_name }}"
+    
+    # Database configuration
+    lamp_db_name: "{{ app_name }}_db"
+    lamp_db_user: "{{ app_name }}_user"
+    lamp_db_password: "{{ vault_lamp_db_password | default('change_me_in_vault') }}"
+    
+    # PHP configuration
+    php_version: "8.1"
+    
+  pre_tasks:
+    - name: Validate LAMP stack requirements
+      assert:
+        that:
+          - vault_lamp_db_password is defined
+          - app_name is defined
+          - inventory_hostname in groups['lamp_stack']
+        fail_msg: "LAMP stack requirements not met. Check vault password and inventory group."
+
+  tasks:
+    # Phase 1: Database Server Setup
+    - name: Configure Database Server
+      block:
+        - name: Install and configure MariaDB
+          include_role:
+            name: database
+          vars:
+            database_type: mariadb
+            database_root_password: "{{ vault_lamp_db_password }}"
+            database_databases:
+              - name: "{{ lamp_db_name }}"
+                encoding: "utf8mb4"
+                collation: "utf8mb4_unicode_ci"
+            database_users:
+              - name: "{{ lamp_db_user }}"
+                password: "{{ lamp_db_password }}"
+                privileges: "{{ lamp_db_name }}.*:ALL"
+                host: "localhost"
+
+        - name: Create additional database user for web server
+          mysql_user:
+            name: "{{ lamp_db_user }}"
+            password: "{{ lamp_db_password }}"
+            priv: "{{ lamp_db_name }}.*:ALL"
+            host: "{{ hostvars[groups['lamp_stack'][0]]['ansible_default_ipv4']['address'] if groups['lamp_stack'] | length > 1 else 'localhost' }}"
+            state: present
+          when: inventory_hostname in groups['dbservers'] or 'db' in inventory_hostname
+      when: inventory_hostname in groups['dbservers'] or 'db' in inventory_hostname
+
+    # Phase 2: Web Server Setup
+    - name: Configure Web Server
+      block:
+        - name: Install and configure Apache
+          include_role:
+            name: webserver
+          vars:
+            webserver_type: apache
+            webserver_servername: "{{ app_domain }}"
+            webserver_document_root: "{{ app_document_root }}"
+            webserver_configure_firewall: true
+
+        - name: Install PHP and required modules
+          package:
+            name: "{{ php_packages }}"
+            state: present
+          vars:
+            php_packages:
+              - "php{{ php_version }}"
+              - "php{{ php_version }}-mysql"
+              - "php{{ php_version }}-xml"
+              - "php{{ php_version }}-mbstring"
+              - "php{{ php_version }}-curl"
+              - "php{{ php_version }}-zip"
+              - "php{{ php_version }}-gd"
+              - "php{{ php_version }}-json"
+              - "php{{ php_version }}-common"
+          notify: restart apache
+
+        - name: Configure PHP
+          lineinfile:
+            path: "/etc/php/{{ php_version }}/apache2/php.ini"
+            regexp: "{{ item.regexp }}"
+            line: "{{ item.line }}"
+            backup: yes
+          loop:
+            - { regexp: "^;?date.timezone", line: "date.timezone = {{ timezone | default('UTC') }}" }
+            - { regexp: "^;?max_execution_time", line: "max_execution_time = 300" }
+            - { regexp: "^;?memory_limit", line: "memory_limit = 256M" }
+            - { regexp: "^;?upload_max_filesize", line: "upload_max_filesize = 64M" }
+            - { regexp: "^;?post_max_size", line: "post_max_size = 64M" }
+            - { regexp: "^;?max_input_vars", line: "max_input_vars = 3000" }
+          notify: restart apache
+          when: ansible_os_family == "Debian"
+
+        - name: Configure PHP (RedHat)
+          lineinfile:
+            path: "/etc/php.ini"
+            regexp: "{{ item.regexp }}"
+            line: "{{ item.line }}"
+            backup: yes
+          loop:
+            - { regexp: "^;?date.timezone", line: "date.timezone = {{ timezone | default('UTC') }}" }
+            - { regexp: "^;?max_execution_time", line: "max_execution_time = 300" }
+            - { regexp: "^;?memory_limit", line: "memory_limit = 256M" }
+            - { regexp: "^;?upload_max_filesize", line: "upload_max_filesize = 64M" }
+            - { regexp: "^;?post_max_size", line: "post_max_size = 64M" }
+            - { regexp: "^;?max_input_vars", line: "max_input_vars = 3000" }
+          notify: restart apache
+          when: ansible_os_family == "RedHat"
+
+        - name: Create application directory
+          file:
+            path: "{{ app_document_root }}"
+            state: directory
+            owner: "{{ 'www-data' if ansible_os_family == 'Debian' else 'apache' }}"
+            group: "{{ 'www-data' if ansible_os_family == 'Debian' else 'apache' }}"
+            mode: '0755'
+
+        - name: Deploy sample PHP application
+          template:
+            src: lamp_sample_app.php.j2
+            dest: "{{ app_document_root }}/index.php"
+            owner: "{{ 'www-data' if ansible_os_family == 'Debian' else 'apache' }}"
+            group: "{{ 'www-data' if ansible_os_family == 'Debian' else 'apache' }}"
+            mode: '0644'
+
+        - name: Create database connection config
+          template:
+            src: db_config.php.j2
+            dest: "{{ app_document_root }}/config/database.php"
+            owner: "{{ 'www-data' if ansible_os_family == 'Debian' else 'apache' }}"
+            group: "{{ 'www-data' if ansible_os_family == 'Debian' else 'apache' }}"
+            mode: '0600'
+
+        - name: Create config directory
+          file:
+            path: "{{ app_document_root }}/config"
+            state: directory
+            owner: "{{ 'www-data' if ansible_os_family == 'Debian' else 'apache' }}"
+            group: "{{ 'www-data' if ansible_os_family == 'Debian' else 'apache' }}"
+            mode: '0755'
+
+        - name: Install Composer (PHP dependency manager)
+          get_url:
+            url: https://getcomposer.org/installer
+            dest: /tmp/composer-installer.php
+            mode: '0755'
+
+        - name: Install Composer
+          command: php /tmp/composer-installer.php --install-dir=/usr/local/bin --filename=composer
+          args:
+            creates: /usr/local/bin/composer
+
+        - name: Set proper SELinux contexts (RedHat family)
+          sefcontext:
+            target: "{{ item.target }}"
+            setype: "{{ item.setype }}"
+            state: present
+          loop:
+            - { target: "{{ app_document_root }}(/.*)?", setype: "httpd_exec_t" }
+            - { target: "{{ app_document_root }}/config(/.*)?", setype: "httpd_config_t" }
+          when: ansible_os_family == "RedHat"
+          notify: restore selinux contexts
+
+      when: inventory_hostname in groups['webservers'] or 'web' in inventory_hostname
+
+    # Phase 3: Integration and Testing
+    - name: Integration Tests
+      block:
+        - name: Wait for services to be ready
+          wait_for:
+            port: "{{ item }}"
+            delay: 10
+          loop:
+            - 80   # Apache
+            - 3306 # MariaDB
+
+        - name: Test database connectivity
+          command: |
+            mysql -u{{ lamp_db_user }} -p{{ lamp_db_password }} -h{{ lamp_db_host }} -e "SELECT 1;"
+          vars:
+            lamp_db_host: "{{ hostvars[groups['dbservers'][0]]['ansible_default_ipv4']['address'] if groups['dbservers'] else 'localhost' }}"
+          register: db_test
+          failed_when: db_test.rc != 0
+          when: inventory_hostname in groups['webservers'] or 'web' in inventory_hostname
+
+        - name: Test web server response
+          uri:
+            url: "http://{{ ansible_default_ipv4.address }}/index.php"
+            method: GET
+            return_content: yes
+          register: web_test
+          failed_when: "'LAMP Stack' not in web_test.content"
+          when: inventory_hostname in groups['webservers'] or 'web' in inventory_hostname
+
+    # Phase 4: Security and Optimization
+    - name: Apply security hardening
+      block:
+        - name: Configure Apache security headers
+          blockinfile:
+            path: "/etc/apache2/conf-available/security.conf"
+            block: |
+              # Security Headers
+              Header always set X-Content-Type-Options nosniff
+              Header always set X-Frame-Options DENY
+              Header always set X-XSS-Protection "1; mode=block"
+              Header always set Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+              Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
+            create: yes
+          when: ansible_os_family == "Debian"
+          notify: restart apache
+
+        - name: Enable security configuration
+          command: a2enconf security
+          when: ansible_os_family == "Debian"
+          notify: restart apache
+
+        - name: Hide Apache version
+          lineinfile:
+            path: "{{ '/etc/apache2/conf-available/security.conf' if ansible_os_family == 'Debian' else '/etc/httpd/conf/httpd.conf' }}"
+            regexp: "{{ item.regexp }}"
+            line: "{{ item.line }}"
+          loop:
+            - { regexp: "^ServerTokens", line: "ServerTokens Prod" }
+            - { regexp: "^ServerSignature", line: "ServerSignature Off" }
+          notify: restart apache
+
+        - name: Configure PHP security settings
+          lineinfile:
+            path: "{{ '/etc/php/' + php_version + '/apache2/php.ini' if ansible_os_family == 'Debian' else '/etc/php.ini' }}"
+            regexp: "{{ item.regexp }}"
+            line: "{{ item.line }}"
+          loop:
+            - { regexp: "^;?expose_php", line: "expose_php = Off" }
+            - { regexp: "^;?display_errors", line: "display_errors = Off" }
+            - { regexp: "^;?log_errors", line: "log_errors = On" }
+            - { regexp: "^;?allow_url_fopen", line: "allow_url_fopen = Off" }
+            - { regexp: "^;?allow_url_include", line: "allow_url_include = Off" }
+          notify: restart apache
+
+  handlers:
+    - name: restart apache
+      service:
+        name: "{{ 'apache2' if ansible_os_family == 'Debian' else 'httpd' }}"
+        state: restarted
+
+    - name: restart mariadb
+      service:
+        name: mariadb
+        state: restarted
+
+    - name: restore selinux contexts
+      command: restorecon -R {{ app_document_root }}
+      when: ansible_os_family == "RedHat"
+
+  post_tasks:
+    - name: Display LAMP stack information
+      debug:
+        msg:
+          - "LAMP Stack deployment completed successfully!"
+          - "Application URL: http://{{ app_domain }}"
+          - "Database: {{ lamp_db_name }}"
+          - "Document Root: {{ app_document_root }}"
+          - "PHP Version: {{ php_version }}"
+      when: inventory_hostname in groups['webservers'] or 'web' in inventory_hostname

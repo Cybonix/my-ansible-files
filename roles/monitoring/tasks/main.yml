@@ -1,0 +1,68 @@
+---
+# Monitoring Role - Main Tasks
+# Based on existing Xymon setup with extended functionality
+
+- name: Include OS-specific variables
+  include_vars: "{{ ansible_os_family }}.yml"
+
+- name: Install monitoring prerequisites
+  package:
+    name: "{{ monitoring_prerequisites }}"
+    state: present
+
+- name: Include Xymon server tasks
+  include_tasks: xymon_server.yml
+  when: 
+    - monitoring_type == "xymon"
+    - monitoring_server_mode | bool
+
+- name: Include Xymon client tasks
+  include_tasks: xymon_client.yml
+  when: 
+    - monitoring_type == "xymon"
+    - not monitoring_server_mode | bool
+
+- name: Include Prometheus tasks
+  include_tasks: prometheus.yml
+  when: monitoring_type == "prometheus"
+
+- name: Configure firewall for monitoring
+  firewalld:
+    port: "{{ item }}/tcp"
+    permanent: yes
+    state: enabled
+    immediate: yes
+  loop: "{{ monitoring_ports[monitoring_type] }}"
+  when: ansible_os_family == "RedHat" and monitoring_configure_firewall | bool
+  ignore_errors: yes
+
+- name: Configure UFW for monitoring (Ubuntu)
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop: "{{ monitoring_ports[monitoring_type] }}"
+  when: ansible_os_family == "Debian" and monitoring_configure_firewall | bool
+  ignore_errors: yes
+
+- name: Create monitoring log directory
+  file:
+    path: "{{ monitoring_log_dir }}"
+    state: directory
+    owner: "{{ monitoring_user }}"
+    group: "{{ monitoring_group }}"
+    mode: '0755'
+
+- name: Configure log rotation for monitoring
+  template:
+    src: monitoring_logrotate.j2
+    dest: /etc/logrotate.d/monitoring
+    mode: '0644'
+
+- name: Start and enable monitoring services
+  service:
+    name: "{{ item }}"
+    state: started
+    enabled: yes
+  loop: "{{ monitoring_services[monitoring_type] }}"
+  ignore_errors: yes

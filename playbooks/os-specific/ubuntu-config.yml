@@ -1,0 +1,275 @@
+---
+- name: Configure Ubuntu Systems
+  hosts: ubuntu_servers
+  become: yes
+  vars:
+    ubuntu_version: "{{ ansible_distribution_version }}"
+    
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Upgrade system packages
+      apt:
+        upgrade: safe
+      when: auto_update_enabled | default(false)
+
+    - name: Install essential Ubuntu packages
+      apt:
+        name: "{{ ubuntu_essential_packages }}"
+        state: present
+      vars:
+        ubuntu_essential_packages:
+          - curl
+          - wget
+          - vim
+          - nano
+          - git
+          - htop
+          - tree
+          - unzip
+          - tar
+          - rsync
+          - screen
+          - tmux
+          - net-tools
+          - dnsutils
+          - telnet
+          - tcpdump
+          - lsof
+          - strace
+          - software-properties-common
+          - apt-transport-https
+          - ca-certificates
+          - gnupg
+          - lsb-release
+          - build-essential
+
+    - name: Configure UFW firewall
+      block:
+        - name: Install UFW
+          apt:
+            name: ufw
+            state: present
+
+        - name: Reset UFW to defaults
+          ufw:
+            state: reset
+          when: firewall_reset | default(false)
+
+        - name: Configure UFW defaults
+          ufw:
+            direction: "{{ item.direction }}"
+            policy: "{{ item.policy }}"
+          loop:
+            - { direction: 'incoming', policy: 'deny' }
+            - { direction: 'outgoing', policy: 'allow' }
+
+        - name: Allow SSH through UFW
+          ufw:
+            rule: allow
+            port: "{{ ssh_port | default('22') }}"
+            proto: tcp
+
+        - name: Enable UFW
+          ufw:
+            state: enabled
+      when: configure_firewall | default(true)
+
+    - name: Configure systemd-timesyncd
+      block:
+        - name: Configure timesyncd
+          lineinfile:
+            path: /etc/systemd/timesyncd.conf
+            regexp: "{{ item.regexp }}"
+            line: "{{ item.line }}"
+          loop:
+            - { regexp: "^#?NTP=", line: "NTP=pool.ntp.org" }
+            - { regexp: "^#?FallbackNTP=", line: "FallbackNTP=ntp.ubuntu.com" }
+          notify: restart timesyncd
+
+        - name: Enable and start systemd-timesyncd
+          service:
+            name: systemd-timesyncd
+            state: started
+            enabled: yes
+
+    - name: Set timezone
+      timezone:
+        name: "{{ timezone | default('UTC') }}"
+
+    - name: Configure SSH hardening
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+        backup: yes
+      loop:
+        - { regexp: "^#?PermitRootLogin", line: "PermitRootLogin {{ 'no' if disable_root_login | default(true) else 'yes' }}" }
+        - { regexp: "^#?PasswordAuthentication", line: "PasswordAuthentication no" }
+        - { regexp: "^#?PubkeyAuthentication", line: "PubkeyAuthentication yes" }
+        - { regexp: "^#?Port", line: "Port {{ ssh_port | default(22) }}" }
+        - { regexp: "^#?MaxAuthTries", line: "MaxAuthTries {{ ssh_max_auth_tries | default(3) }}" }
+        - { regexp: "^#?ClientAliveInterval", line: "ClientAliveInterval {{ ssh_client_alive_interval | default(300) }}" }
+        - { regexp: "^#?ClientAliveCountMax", line: "ClientAliveCountMax {{ ssh_client_alive_count_max | default(2) }}" }
+        - { regexp: "^#?X11Forwarding", line: "X11Forwarding no" }
+      notify: restart sshd
+
+    - name: Install and configure fail2ban
+      block:
+        - name: Install fail2ban
+          apt:
+            name: fail2ban
+            state: present
+
+        - name: Configure fail2ban for SSH
+          copy:
+            content: |
+              [sshd]
+              enabled = true
+              port = {{ ssh_port | default(22) }}
+              filter = sshd
+              logpath = /var/log/auth.log
+              maxretry = 3
+              bantime = 3600
+              findtime = 600
+            dest: /etc/fail2ban/jail.d/sshd.local
+          notify: restart fail2ban
+
+        - name: Start and enable fail2ban
+          service:
+            name: fail2ban
+            state: started
+            enabled: yes
+      when: enable_fail2ban | default(true)
+
+    - name: Configure unattended upgrades
+      block:
+        - name: Install unattended-upgrades
+          apt:
+            name: unattended-upgrades
+            state: present
+
+        - name: Configure automatic updates
+          copy:
+            content: |
+              Unattended-Upgrade::Allowed-Origins {
+                  "${distro_id}:${distro_codename}";
+                  "${distro_id}:${distro_codename}-security";
+                  "${distro_id}ESMApps:${distro_codename}-apps-security";
+                  "${distro_id}ESM:${distro_codename}-infra-security";
+              };
+              Unattended-Upgrade::Package-Blacklist {
+              };
+              Unattended-Upgrade::DevRelease "auto";
+              Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+              Unattended-Upgrade::Remove-New-Unused-Dependencies "true";
+              Unattended-Upgrade::Remove-Unused-Dependencies "false";
+              Unattended-Upgrade::Automatic-Reboot "{{ unattended_upgrades_automatic_reboot | default(false) | lower }}";
+              Unattended-Upgrade::Automatic-Reboot-Time "{{ unattended_upgrades_time | default('06:00') }}";
+            dest: /etc/apt/apt.conf.d/50unattended-upgrades
+
+        - name: Enable automatic updates
+          copy:
+            content: |
+              APT::Periodic::Update-Package-Lists "1";
+              APT::Periodic::Download-Upgradeable-Packages "1";
+              APT::Periodic::AutocleanInterval "7";
+              APT::Periodic::Unattended-Upgrade "1";
+            dest: /etc/apt/apt.conf.d/20auto-upgrades
+      when: unattended_upgrades_enabled | default(true)
+
+    - name: Configure log rotation
+      copy:
+        content: |
+          /var/log/*.log {
+              daily
+              missingok
+              rotate {{ log_rotation_days | default(30) }}
+              compress
+              delaycompress
+              notifempty
+              create 644 root root
+          }
+        dest: /etc/logrotate.d/custom-logs
+
+    - name: Set kernel parameters
+      sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        state: present
+        reload: yes
+      loop: "{{ kernel_parameters | default([]) }}"
+
+    - name: Create local admin user
+      user:
+        name: "{{ local_admin_user }}"
+        comment: "Local Administrator"
+        shell: "{{ default_shell | default('/bin/bash') }}"
+        groups: sudo
+        append: yes
+        create_home: yes
+        home: "/home/{{ local_admin_user }}"
+      when: local_admin_user is defined
+
+    - name: Add local admin user to sudoers
+      copy:
+        content: "{{ local_admin_user }} ALL=(ALL) NOPASSWD:ALL"
+        dest: "/etc/sudoers.d/{{ local_admin_user }}"
+        mode: '0440'
+        validate: visudo -cf %s
+      when: local_admin_user is defined
+
+    - name: Configure AppArmor
+      service:
+        name: apparmor
+        state: started
+        enabled: yes
+      when: apparmor_enabled | default(true)
+
+    - name: Install snap packages
+      snap:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ snap_packages | default([]) }}"
+      ignore_errors: yes
+
+    - name: Configure journald
+      lineinfile:
+        path: /etc/systemd/journald.conf
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+      loop:
+        - { regexp: "^#?Storage=", line: "Storage=persistent" }
+        - { regexp: "^#?SystemMaxUse=", line: "SystemMaxUse=1G" }
+        - { regexp: "^#?RuntimeMaxUse=", line: "RuntimeMaxUse=128M" }
+        - { regexp: "^#?MaxRetentionSec=", line: "MaxRetentionSec=1month" }
+      notify: restart journald
+
+    - name: Remove unnecessary packages
+      apt:
+        autoremove: yes
+        autoclean: yes
+
+  handlers:
+    - name: restart sshd
+      service:
+        name: ssh
+        state: restarted
+
+    - name: restart fail2ban
+      service:
+        name: fail2ban
+        state: restarted
+
+    - name: restart timesyncd
+      service:
+        name: systemd-timesyncd
+        state: restarted
+
+    - name: restart journald
+      service:
+        name: systemd-journald
+        state: restarted

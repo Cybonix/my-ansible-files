@@ -1,0 +1,69 @@
+---
+# PostgreSQL specific tasks
+
+- name: Initialize PostgreSQL database
+  command: "{{ postgresql_setup_command }}"
+  args:
+    creates: "{{ postgresql_data_dir }}/PG_VERSION"
+  become: yes
+  become_user: postgres
+  when: ansible_os_family == "RedHat"
+
+- name: Start and enable PostgreSQL service
+  service:
+    name: "{{ database_service.postgresql }}"
+    state: started
+    enabled: yes
+
+- name: Set PostgreSQL password for postgres user
+  postgresql_user:
+    name: postgres
+    password: "{{ database_root_password }}"
+    login_host: localhost
+    login_user: postgres
+  become: yes
+  become_user: postgres
+  when: database_root_password is defined
+
+- name: Create PostgreSQL databases
+  postgresql_db:
+    name: "{{ item.name }}"
+    encoding: "{{ item.encoding | default('UTF8') }}"
+    lc_collate: "{{ item.collation | default('en_US.UTF-8') }}"
+    lc_ctype: "{{ item.ctype | default('en_US.UTF-8') }}"
+    template: "{{ item.template | default('template0') }}"
+    state: present
+  loop: "{{ database_databases }}"
+  become: yes
+  become_user: postgres
+  when: database_databases is defined
+
+- name: Create PostgreSQL users
+  postgresql_user:
+    name: "{{ item.name }}"
+    password: "{{ item.password }}"
+    db: "{{ item.database | default(omit) }}"
+    priv: "{{ item.privileges | default(omit) }}"
+    role_attr_flags: "{{ item.role_flags | default(omit) }}"
+    state: present
+  loop: "{{ database_users }}"
+  become: yes
+  become_user: postgres
+  when: database_users is defined
+  no_log: true
+
+- name: Configure PostgreSQL
+  template:
+    src: postgresql.conf.j2
+    dest: "{{ postgresql_config_file }}"
+    backup: yes
+  notify: restart database
+  when: database_custom_config | bool
+
+- name: Configure PostgreSQL host-based authentication
+  template:
+    src: pg_hba.conf.j2
+    dest: "{{ postgresql_hba_file }}"
+    backup: yes
+  notify: restart database
+  when: database_custom_config | bool

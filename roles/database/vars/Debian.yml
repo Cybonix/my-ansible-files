@@ -1,0 +1,49 @@
+---
+# Debian/Ubuntu specific variables
+
+database_service:
+  mysql: mysql
+  mariadb: mariadb
+  postgresql: postgresql
+
+database_packages:
+  mysql:
+    - mysql-server
+    - mysql-common
+  mariadb:
+    - mariadb-server
+    - mariadb-common
+  postgresql:
+    - postgresql
+    - postgresql-contrib
+
+database_client_packages:
+  mysql:
+    - mysql-client
+  mariadb:
+    - mariadb-client
+  postgresql:
+    - postgresql-client
+
+database_python_packages:
+  mysql:
+    - python3-pymysql
+  mariadb:
+    - python3-pymysql
+  postgresql:
+    - python3-psycopg2
+
+# Configuration files
+mysql_config_file: /etc/mysql/mariadb.conf.d/50-server.cnf
+postgresql_config_file: /etc/postgresql/*/main/postgresql.conf
+postgresql_hba_file: /etc/postgresql/*/main/pg_hba.conf
+
+# Data directories
+mysql_data_dir: /var/lib/mysql
+postgresql_data_dir: /var/lib/postgresql/*/main
+
+# Socket files
+mysql_socket: /var/run/mysqld/mysqld.sock
+
+# Setup commands (not needed on Ubuntu/Debian as it's done automatically)
+postgresql_setup_command: echo "PostgreSQL is already initialized on Debian/Ubuntu"

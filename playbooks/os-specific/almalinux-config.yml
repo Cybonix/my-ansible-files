@@ -1,0 +1,261 @@
+---
+- name: Configure AlmaLinux Systems
+  hosts: alma_linux
+  become: yes
+  vars:
+    alma_version: "{{ ansible_distribution_version }}"
+    
+  tasks:
+    - name: Update system packages
+      dnf:
+        name: "*"
+        state: latest
+        update_cache: yes
+      when: auto_update_enabled | default(false)
+
+    - name: Install EPEL repository
+      dnf:
+        name: epel-release
+        state: present
+
+    - name: Enable PowerTools repository
+      command: dnf config-manager --set-enabled powertools
+      changed_when: false
+      failed_when: false
+
+    - name: Install AlmaLinux release package
+      dnf:
+        name: almalinux-release
+        state: present
+
+    - name: Install essential AlmaLinux packages
+      dnf:
+        name: "{{ alma_essential_packages }}"
+        state: present
+      vars:
+        alma_essential_packages:
+          - curl
+          - wget
+          - vim
+          - nano
+          - git
+          - htop
+          - tree
+          - unzip
+          - tar
+          - rsync
+          - screen
+          - tmux
+          - net-tools
+          - bind-utils
+          - telnet
+          - tcpdump
+          - lsof
+          - strace
+          - redhat-lsb-core
+          - policycoreutils-python-utils
+          - setroubleshoot-server
+
+    - name: Configure firewalld
+      service:
+        name: firewalld
+        state: started
+        enabled: yes
+      when: configure_firewall | default(true)
+
+    - name: Configure SELinux
+      selinux:
+        policy: "{{ selinux_policy | default('targeted') }}"
+        state: "{{ selinux_state | default('enforcing') }}"
+      notify: reboot system
+
+    - name: Configure chronyd for time synchronization
+      service:
+        name: chronyd
+        state: started
+        enabled: yes
+
+    - name: Set timezone
+      timezone:
+        name: "{{ timezone | default('UTC') }}"
+
+    - name: Configure SSH hardening
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+        backup: yes
+      loop:
+        - { regexp: "^#?PermitRootLogin", line: "PermitRootLogin {{ 'no' if disable_root_login | default(true) else 'yes' }}" }
+        - { regexp: "^#?PasswordAuthentication", line: "PasswordAuthentication no" }
+        - { regexp: "^#?PubkeyAuthentication", line: "PubkeyAuthentication yes" }
+        - { regexp: "^#?Protocol", line: "Protocol {{ ssh_protocol_version | default(2) }}" }
+        - { regexp: "^#?Port", line: "Port {{ ssh_port | default(22) }}" }
+        - { regexp: "^#?MaxAuthTries", line: "MaxAuthTries {{ ssh_max_auth_tries | default(3) }}" }
+        - { regexp: "^#?ClientAliveInterval", line: "ClientAliveInterval {{ ssh_client_alive_interval | default(300) }}" }
+        - { regexp: "^#?ClientAliveCountMax", line: "ClientAliveCountMax {{ ssh_client_alive_count_max | default(2) }}" }
+      notify: restart sshd
+
+    - name: Install and configure fail2ban
+      block:
+        - name: Install fail2ban
+          dnf:
+            name: fail2ban
+            state: present
+
+        - name: Configure fail2ban for SSH
+          copy:
+            content: |
+              [sshd]
+              enabled = true
+              port = {{ ssh_port | default(22) }}
+              filter = sshd
+              logpath = /var/log/secure
+              maxretry = 3
+              bantime = 3600
+              findtime = 600
+            dest: /etc/fail2ban/jail.d/sshd.local
+          notify: restart fail2ban
+
+        - name: Start and enable fail2ban
+          service:
+            name: fail2ban
+            state: started
+            enabled: yes
+      when: enable_fail2ban | default(true)
+
+    - name: Configure log rotation
+      copy:
+        content: |
+          /var/log/*.log {
+              daily
+              missingok
+              rotate {{ log_rotation_days | default(30) }}
+              compress
+              delaycompress
+              notifempty
+              create 644 root root
+          }
+        dest: /etc/logrotate.d/custom-logs
+
+    - name: Set kernel parameters
+      sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        state: present
+        reload: yes
+      loop: "{{ kernel_parameters | default([]) }}"
+
+    - name: Create local admin user
+      user:
+        name: "{{ local_admin_user }}"
+        comment: "Local Administrator"
+        shell: "{{ default_shell | default('/bin/bash') }}"
+        groups: wheel
+        append: yes
+        create_home: yes
+        home: "/home/{{ local_admin_user }}"
+      when: local_admin_user is defined
+
+    - name: Add local admin user to sudoers
+      copy:
+        content: "{{ local_admin_user }} ALL=(ALL) NOPASSWD:ALL"
+        dest: "/etc/sudoers.d/{{ local_admin_user }}"
+        mode: '0440'
+        validate: visudo -cf %s
+      when: local_admin_user is defined
+
+    - name: Configure AlmaLinux repositories
+      yum_repository:
+        name: "{{ item.name }}"
+        description: "AlmaLinux {{ item.name | title }} Repository"
+        baseurl: "https://repo.almalinux.org/almalinux/$releasever/{{ item.name }}/$basearch/os/"
+        enabled: "{{ item.enabled }}"
+        gpgcheck: yes
+        gpgkey: "https://repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux"
+      loop: "{{ almalinux_repos | default([]) }}"
+
+    - name: Configure automatic security updates
+      block:
+        - name: Install dnf-automatic
+          dnf:
+            name: dnf-automatic
+            state: present
+
+        - name: Configure dnf-automatic for security updates only
+          lineinfile:
+            path: /etc/dnf/automatic.conf
+            regexp: "{{ item.regexp }}"
+            line: "{{ item.line }}"
+          loop:
+            - { regexp: "^upgrade_type", line: "upgrade_type = {{ 'security' if security_updates_only | default(true) else 'default' }}" }
+            - { regexp: "^apply_updates", line: "apply_updates = {{ 'yes' if automatic_updates | default(false) else 'no' }}" }
+            - { regexp: "^emit_via", line: "emit_via = stdio" }
+
+        - name: Enable and start dnf-automatic timer
+          systemd:
+            name: dnf-automatic-install.timer
+            state: started
+            enabled: yes
+      when: auto_update_enabled | default(false)
+
+    - name: Configure audit daemon
+      service:
+        name: auditd
+        state: started
+        enabled: yes
+
+    - name: Configure rsyslog
+      lineinfile:
+        path: /etc/rsyslog.conf
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+      loop:
+        - { regexp: "^#?$ModLoad imjournal", line: "$ModLoad imjournal" }
+        - { regexp: "^#?$WorkDirectory", line: "$WorkDirectory /var/lib/rsyslog" }
+        - { regexp: "^#?$ActionFileDefaultTemplate", line: "$ActionFileDefaultTemplate RSYSLOG_TraditionalFileFormat" }
+      notify: restart rsyslog
+
+    - name: Setup log monitoring
+      copy:
+        content: |
+          # Custom log monitoring for AlmaLinux
+          # Monitor important system logs
+          /var/log/messages {
+              daily
+              missingok
+              rotate 52
+              compress
+              delaycompress
+              notifempty
+              create 644 root root
+              postrotate
+                  /bin/kill -HUP `cat /var/run/rsyslogd.pid 2> /dev/null` 2> /dev/null || true
+              endscript
+          }
+        dest: /etc/logrotate.d/almalinux-system
+
+  handlers:
+    - name: restart sshd
+      service:
+        name: sshd
+        state: restarted
+
+    - name: restart fail2ban
+      service:
+        name: fail2ban
+        state: restarted
+
+    - name: restart rsyslog
+      service:
+        name: rsyslog
+        state: restarted
+
+    - name: reboot system
+      reboot:
+        msg: "Reboot initiated by Ansible for SELinux changes"
+        connect_timeout: 5
+        reboot_timeout: 300
+        pre_reboot_delay: 0
+        post_reboot_delay: 30
+        test_command: whoami

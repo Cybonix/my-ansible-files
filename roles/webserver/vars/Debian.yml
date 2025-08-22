@@ -1,0 +1,20 @@
+---
+# Debian/Ubuntu specific variables
+
+webserver_user: www-data
+webserver_group: www-data
+
+webserver_service:
+  apache: apache2
+  nginx: nginx
+
+webserver_packages:
+  apache:
+    - apache2
+    - apache2-utils
+  nginx:
+    - nginx
+
+apache_vhost_path: /etc/apache2/sites-available
+nginx_sites_available: /etc/nginx/sites-available
+nginx_sites_enabled: /etc/nginx/sites-enabled

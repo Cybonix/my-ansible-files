@@ -1,0 +1,35 @@
+---
+# Global variables for all hosts
+
+# Common packages to install on all systems
+common_packages:
+  - vim
+  - curl
+  - wget
+  - unzip
+  - git
+  - htop
+  - tree
+
+# Security settings
+disable_root_login: true
+configure_firewall: true
+enable_fail2ban: true
+
+# Time and locale settings
+timezone: "UTC"
+locale: "en_US.UTF-8"
+
+# Log retention
+log_rotation_days: 30
+
+# Update settings
+auto_update_enabled: false
+reboot_required_check: true
+
+# SSH settings
+ssh_port: 22
+ssh_protocol_version: 2
+ssh_max_auth_tries: 3
+ssh_client_alive_interval: 300
+ssh_client_alive_count_max: 2

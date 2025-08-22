@@ -1,0 +1,49 @@
+---
+# RedHat/CentOS/Rocky Linux/AlmaLinux specific variables
+
+database_service:
+  mysql: mysqld
+  mariadb: mariadb
+  postgresql: postgresql
+
+database_packages:
+  mysql:
+    - mysql-server
+    - mysql-common
+  mariadb:
+    - mariadb-server
+    - mariadb-common
+  postgresql:
+    - postgresql-server
+    - postgresql-contrib
+
+database_client_packages:
+  mysql:
+    - mysql
+  mariadb:
+    - mariadb
+  postgresql:
+    - postgresql
+
+database_python_packages:
+  mysql:
+    - python3-PyMySQL
+  mariadb:
+    - python3-PyMySQL
+  postgresql:
+    - python3-psycopg2
+
+# Configuration files
+mysql_config_file: /etc/my.cnf.d/server.cnf
+postgresql_config_file: /var/lib/pgsql/data/postgresql.conf
+postgresql_hba_file: /var/lib/pgsql/data/pg_hba.conf
+
+# Data directories
+mysql_data_dir: /var/lib/mysql
+postgresql_data_dir: /var/lib/pgsql/data
+
+# Socket files
+mysql_socket: /var/lib/mysql/mysql.sock
+
+# Setup commands
+postgresql_setup_command: postgresql-setup initdb

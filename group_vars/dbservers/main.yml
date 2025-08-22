@@ -1,0 +1,39 @@
+---
+# Variables for database servers group
+
+# Database configuration
+database_type: mariadb  # mysql, mariadb, or postgresql
+database_configure_firewall: true
+database_custom_config: true
+
+# Security settings
+database_remove_anonymous_users: true
+database_remove_test_database: true
+database_disallow_root_remote: true
+
+# Performance tuning
+database_max_connections: 200
+database_query_cache_size: "32M"
+database_innodb_buffer_pool_size: "256M"
+
+# Backup configuration
+database_backup_enabled: true
+database_backup_retention_days: 7
+database_backup_schedule: "0 2 * * *"  # Daily at 2 AM
+
+# Monitoring
+database_monitoring_enabled: true
+database_slow_query_log: true
+database_slow_query_time: 2
+
+# Example databases and users (override in host_vars for security)
+database_databases:
+  - name: "webapp_db"
+    encoding: "utf8mb4"
+    collation: "utf8mb4_unicode_ci"
+
+database_users:
+  - name: "webapp_user"
+    password: "change_me_in_host_vars"
+    privileges: "webapp_db.*:ALL"
+    host: "localhost"

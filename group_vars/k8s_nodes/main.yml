@@ -1,0 +1,55 @@
+---
+# Variables for Kubernetes nodes group
+
+# Kubernetes configuration
+k8s_version: "v1.28.2+rke2r1"
+k8s_channel: "stable"
+k8s_cluster_name: "lab-cluster"
+
+# Container runtime
+container_runtime: containerd
+
+# Network configuration
+k8s_cluster_cidr: "10.42.0.0/16"
+k8s_service_cidr: "10.43.0.0/16"
+k8s_cluster_dns: "10.43.0.10"
+k8s_cluster_domain: "cluster.local"
+
+# RKE2 specific settings
+rke2_data_dir: "/var/lib/rancher/rke2"
+rke2_config_dir: "/etc/rancher/rke2"
+rke2_bin_dir: "/var/lib/rancher/rke2/bin"
+
+# Security settings
+k8s_audit_enabled: true
+k8s_psp_enabled: true  # Pod Security Policy
+k8s_network_policy_enabled: true
+
+# Monitoring and logging
+k8s_metrics_server_enabled: true
+k8s_monitoring_namespace: "monitoring"
+
+# Storage
+k8s_default_storage_class: "local-path"
+
+# Node configuration
+k8s_node_labels: {}
+k8s_node_taints: []
+
+# Backup configuration
+k8s_etcd_backup_enabled: true
+k8s_etcd_backup_retention: "5"
+k8s_etcd_backup_schedule: "0 */12 * * *"  # Every 12 hours
+
+# Firewall ports for Kubernetes
+k8s_master_ports:
+  - "6443/tcp"    # Kubernetes API
+  - "2379-2380/tcp"  # etcd
+  - "10250/tcp"   # kubelet
+  - "10251/tcp"   # kube-scheduler
+  - "10252/tcp"   # kube-controller-manager
+  - "9345/tcp"    # RKE2 supervisor
+
+k8s_worker_ports:
+  - "10250/tcp"   # kubelet
+  - "30000-32767/tcp"  # NodePort services

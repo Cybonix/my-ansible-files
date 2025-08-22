@@ -1,0 +1,67 @@
+---
+# MySQL/MariaDB specific tasks
+
+- name: Set MySQL root password for localhost
+  mysql_user:
+    name: root
+    password: "{{ database_root_password }}"
+    login_unix_socket: "{{ mysql_socket }}"
+    state: present
+  when: database_root_password is defined
+
+- name: Create MySQL configuration file with root password
+  template:
+    src: my.cnf.j2
+    dest: /root/.my.cnf
+    owner: root
+    group: root
+    mode: '0600'
+  when: database_root_password is defined
+
+- name: Remove anonymous MySQL users
+  mysql_user:
+    name: ""
+    host_all: yes
+    state: absent
+  when: database_remove_anonymous_users | bool
+
+- name: Remove MySQL test database
+  mysql_db:
+    name: test
+    state: absent
+  when: database_remove_test_database | bool
+
+- name: Disallow root login remotely
+  mysql_user:
+    name: root
+    host: "{{ ansible_hostname }}"
+    state: absent
+  when: database_disallow_root_remote | bool
+
+- name: Create MySQL databases
+  mysql_db:
+    name: "{{ item.name }}"
+    state: present
+    encoding: "{{ item.encoding | default('utf8') }}"
+    collation: "{{ item.collation | default('utf8_general_ci') }}"
+  loop: "{{ database_databases }}"
+  when: database_databases is defined
+
+- name: Create MySQL users
+  mysql_user:
+    name: "{{ item.name }}"
+    password: "{{ item.password }}"
+    priv: "{{ item.privileges | default('*.*:USAGE') }}"
+    host: "{{ item.host | default('localhost') }}"
+    state: present
+  loop: "{{ database_users }}"
+  when: database_users is defined
+  no_log: true
+
+- name: Configure MySQL/MariaDB
+  template:
+    src: "{{ database_type }}.cnf.j2"
+    dest: "{{ mysql_config_file }}"
+    backup: yes
+  notify: restart database
+  when: database_custom_config | bool

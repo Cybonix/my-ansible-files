@@ -1,0 +1,23 @@
+---
+# RedHat/CentOS/Rocky Linux/AlmaLinux specific variables
+
+webserver_user: apache
+webserver_group: apache
+
+webserver_service:
+  apache: httpd
+  nginx: nginx
+
+webserver_packages:
+  apache:
+    - httpd
+    - httpd-tools
+  nginx:
+    - nginx
+
+apache_vhost_path: /etc/httpd/conf.d
+nginx_sites_available: /etc/nginx/conf.d
+nginx_sites_enabled: /etc/nginx/conf.d
+
+# RedHat family doesn't use sites-available/sites-enabled by default
+nginx_config_dir: /etc/nginx/conf.d

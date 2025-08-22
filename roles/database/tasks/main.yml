@@ -1,0 +1,54 @@
+---
+# Database Server Role - Main Tasks
+# Supports both MySQL/MariaDB and PostgreSQL based on the database_type variable
+
+- name: Include OS-specific variables
+  include_vars: "{{ ansible_os_family }}.yml"
+
+- name: Install database server packages
+  package:
+    name: "{{ database_packages[database_type] }}"
+    state: present
+  notify: 
+    - restart database
+
+- name: Install database client packages
+  package:
+    name: "{{ database_client_packages[database_type] }}"
+    state: present
+
+- name: Install Python database modules
+  package:
+    name: "{{ database_python_packages[database_type] }}"
+    state: present
+
+- name: Start and enable database service
+  service:
+    name: "{{ database_service[database_type] }}"
+    state: started
+    enabled: yes
+
+- name: Include MySQL/MariaDB specific tasks
+  include_tasks: mysql.yml
+  when: database_type in ['mysql', 'mariadb']
+
+- name: Include PostgreSQL specific tasks
+  include_tasks: postgresql.yml
+  when: database_type == 'postgresql'
+
+- name: Configure firewall for database
+  firewalld:
+    port: "{{ database_ports[database_type] }}/tcp"
+    permanent: yes
+    state: enabled
+    immediate: yes
+  when: ansible_os_family == "RedHat" and database_configure_firewall | bool
+  ignore_errors: yes
+
+- name: Configure UFW for database (Ubuntu)
+  ufw:
+    rule: allow
+    port: "{{ database_ports[database_type] }}"
+    proto: tcp
+  when: ansible_os_family == "Debian" and database_configure_firewall | bool
+  ignore_errors: yes

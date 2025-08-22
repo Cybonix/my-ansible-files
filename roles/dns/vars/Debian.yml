@@ -1,0 +1,77 @@
+---
+# Debian/Ubuntu specific variables for DNS
+
+# Package names
+dns_packages:
+  - bind9
+  - bind9-utils
+  - bind9-doc
+
+dns_utils_packages:
+  - dnsutils
+
+# Service configuration
+dns_service: bind9
+dns_standard_service: bind9
+
+# User and group
+dns_user: bind
+dns_group: bind
+
+# Directory paths
+dns_config_dir: /etc/bind
+dns_zone_dir: /var/lib/bind
+dns_data_dir: /var/cache/bind
+dns_log_dir: /var/log/bind
+dns_home_dir: /var/cache/bind
+
+# Chroot specific paths (Debian/Ubuntu uses different approach)
+dns_chroot_dir: /var/cache/bind
+dns_chroot_package: bind9
+dns_chroot_setup_script: ""  # Not used on Debian
+
+# Configuration files
+dns_main_config: /etc/bind/named.conf
+dns_chroot_main_config: /etc/bind/named.conf
+
+# Additional Debian-specific configs
+dns_options_config: /etc/bind/named.conf.options
+dns_local_config: /etc/bind/named.conf.local
+dns_default_zones: /etc/bind/named.conf.default-zones
+
+# PowerDNS packages for Debian
+powerdns_packages:
+  - pdns-server
+  - pdns-tools
+
+powerdns_backend_packages:
+  bind:
+    - pdns-backend-bind
+  mysql:
+    - pdns-backend-mysql
+  postgresql:
+    - pdns-backend-pgsql
+  sqlite:
+    - pdns-backend-sqlite3
+
+# PowerDNS paths
+powerdns_config_dir: /etc/powerdns
+powerdns_zone_dir: /etc/powerdns/zones
+powerdns_service: pdns
+powerdns_user: pdns
+powerdns_group: pdns
+
+# System paths
+resolv_conf: /etc/resolv.conf
+systemd_dir: /etc/systemd/system
+
+# AppArmor profile (Ubuntu specific)
+apparmor_profile: /etc/apparmor.d/usr.sbin.named
+
+# Default zones for Debian/Ubuntu
+debian_default_zones:
+  - "zone \".\" {\n\ttype hint;\n\tfile \"/usr/share/dns/root.hints\";\n};"
+  - "zone \"localhost\" {\n\ttype master;\n\tfile \"/etc/bind/db.local\";\n};"
+  - "zone \"127.in-addr.arpa\" {\n\ttype master;\n\tfile \"/etc/bind/db.127\";\n};"
+  - "zone \"0.in-addr.arpa\" {\n\ttype master;\n\tfile \"/etc/bind/db.0\";\n};"
+  - "zone \"255.in-addr.arpa\" {\n\ttype master;\n\tfile \"/etc/bind/db.255\";\n};"

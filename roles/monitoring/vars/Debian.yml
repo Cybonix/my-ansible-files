@@ -1,0 +1,52 @@
+---
+# Debian/Ubuntu specific variables for monitoring
+
+# Package prerequisites
+monitoring_prerequisites:
+  - build-essential
+  - libssl-dev
+  - librrd-dev
+  - libpcre3-dev
+  - libc-client2007e-dev
+  - wget
+  - curl
+  - autoconf
+
+# Xymon client package for Debian family
+xymon_client_package_url: "http://xymon.com/xymon/client/xymon-client_4.3.28-2_amd64.deb"
+xymon_client_package_name: "xymon-client_4.3.28-2_amd64.deb"
+
+# Xymon server packages
+xymon_server_packages:
+  - build-essential
+  - librrd-dev
+  - libssl-dev
+  - libpcre3-dev
+  - apache2-dev
+  - libc-client2007e-dev
+  - libkrb5-dev
+  - libsnmp-dev
+
+# Service management
+monitoring_service_manager: systemd
+
+# Apache configuration
+apache_config_dir: /etc/apache2/conf-available
+apache_service: apache2
+
+# Log directories
+system_log_dir: /var/log
+monitoring_log_dir: /var/log/monitoring
+
+# Firewall service
+firewall_service: ufw
+
+# User and group settings
+monitoring_user: xymon
+monitoring_group: xymon
+
+# Prometheus specific packages
+prometheus_prerequisites:
+  - tar
+  - gzip
+  - systemd

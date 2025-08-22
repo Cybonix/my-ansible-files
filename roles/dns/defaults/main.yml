@@ -1,0 +1,138 @@
+---
+# Default variables for DNS role
+
+# DNS server type: bind or powerdns
+dns_type: bind
+
+# BIND configuration
+dns_chroot_enabled: true
+dns_configure_firewall: true
+dns_configure_resolv: false
+
+# Service and user configuration
+dns_user: named
+dns_group: named
+dns_service: named-chroot
+
+# Directory paths (will be overridden by OS-specific vars)
+dns_config_dir: /etc/named
+dns_zone_dir: /var/named
+dns_data_dir: /var/named/data
+dns_log_dir: /var/log/named
+dns_home_dir: /var/named
+
+# Chroot configuration
+dns_chroot_dir: /var/named/chroot
+dns_chroot_package: bind-chroot
+dns_chroot_setup_script: /usr/libexec/setup-named-chroot.sh
+
+# Package names (OS-specific, overridden in vars/)
+dns_packages:
+  - bind
+  - bind-utils
+
+dns_utils_packages:
+  - dig
+  - nslookup
+
+# Network configuration
+dns_listen_on: 
+  - "127.0.0.1"
+  - "{{ ansible_default_ipv4.address }}"
+
+dns_listen_on_v6:
+  - "::1"
+
+dns_allow_query:
+  - "localhost"
+  - "{{ ansible_default_ipv4.network }}/{{ ansible_default_ipv4.netmask }}"
+
+dns_allow_recursion:
+  - "localhost"
+  - "{{ ansible_default_ipv4.network }}/{{ ansible_default_ipv4.netmask }}"
+
+dns_forwarders:
+  - "8.8.8.8"
+  - "8.8.4.4"
+  - "1.1.1.1"
+
+# Security settings
+dns_recursion: yes
+dns_dnssec_enable: yes
+dns_dnssec_validation: yes
+
+# Logging configuration
+dns_log_level: info
+dns_log_queries: no
+dns_log_transfers: yes
+
+# Performance tuning
+dns_cleaning_interval: 60
+dns_interface_interval: 60
+dns_max_cache_size: "256M"
+dns_max_cache_ttl: 86400
+dns_max_ncache_ttl: 3600
+
+# Zone configuration
+dns_zones: []
+dns_reverse_zones: []
+
+# Example zone configuration:
+# dns_zones:
+#   - name: "example.com"
+#     filename: "db.example.com"
+#     template: "zone.j2"
+#     type: "master"
+#     records:
+#       - { name: "@", type: "A", value: "192.168.1.10" }
+#       - { name: "www", type: "A", value: "192.168.1.10" }
+#       - { name: "mail", type: "A", value: "192.168.1.20" }
+#       - { name: "@", type: "MX", value: "10 mail.example.com." }
+
+# Default SOA values
+dns_default_soa:
+  serial: "{{ ansible_date_time.epoch }}"
+  refresh: 3600
+  retry: 1800
+  expire: 604800
+  minimum: 86400
+  admin_email: "admin.{{ inventory_hostname }}"
+
+# Test domain for DNS resolution testing
+dns_test_domain: "google.com"
+
+# PowerDNS Configuration (when dns_type is powerdns)
+powerdns_user: pdns
+powerdns_group: pdns
+powerdns_service: pdns
+powerdns_config_dir: /etc/powerdns
+powerdns_zone_dir: /etc/powerdns/zones
+
+# PowerDNS backend: bind, mysql, postgresql, sqlite
+powerdns_backend: bind
+
+# PowerDNS packages
+powerdns_packages:
+  - pdns-server
+
+powerdns_backend_packages:
+  bind:
+    - pdns-backend-bind
+  mysql:
+    - pdns-backend-mysql
+  postgresql:
+    - pdns-backend-postgresql
+  sqlite:
+    - pdns-backend-sqlite3
+
+# PowerDNS database settings (for database backends)
+powerdns_db_host: localhost
+powerdns_db_name: powerdns
+powerdns_db_user: powerdns
+powerdns_db_password: "{{ vault_powerdns_db_password | default('change_me') }}"
+
+# PowerDNS features
+powerdns_enable_api: false
+powerdns_enable_webserver: false
+powerdns_api_key: "{{ vault_powerdns_api_key | default('') }}"
+powerdns_webserver_port: 8081

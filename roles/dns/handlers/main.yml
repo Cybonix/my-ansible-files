@@ -1,0 +1,55 @@
+---
+# Handlers for DNS role
+
+- name: reload systemd
+  systemd:
+    daemon_reload: yes
+
+- name: restart dns
+  service:
+    name: "{{ dns_service }}"
+    state: restarted
+
+- name: reload dns
+  service:
+    name: "{{ dns_service }}"
+    state: reloaded
+
+- name: check dns config
+  command: "{{ 'named-checkconf' if dns_type == 'bind' else 'pdns_control check-config' }}"
+  register: dns_config_check
+  failed_when: dns_config_check.rc != 0
+  changed_when: false
+
+- name: restart bind9
+  service:
+    name: bind9
+    state: restarted
+  when: ansible_os_family == "Debian"
+
+- name: restart named
+  service:
+    name: named
+    state: restarted
+  when: ansible_os_family == "RedHat"
+
+- name: restart named-chroot
+  service:
+    name: named-chroot
+    state: restarted
+  when: ansible_os_family == "RedHat"
+
+- name: restart powerdns
+  service:
+    name: "{{ powerdns_service }}"
+    state: restarted
+
+- name: restore selinux contexts
+  command: "restorecon -R {{ item }}"
+  loop:
+    - "{{ dns_config_dir }}"
+    - "{{ dns_zone_dir }}"
+    - "{{ dns_log_dir }}"
+    - "{{ dns_chroot_dir }}"
+  when: ansible_os_family == "RedHat"
+  changed_when: false

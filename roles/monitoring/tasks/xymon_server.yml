@@ -1,0 +1,140 @@
+---
+# Xymon Server Installation and Configuration
+
+- name: Install Xymon server packages
+  package:
+    name: "{{ xymon_server_packages }}"
+    state: present
+
+- name: Create Xymon server user
+  user:
+    name: "{{ xymon_user }}"
+    group: "{{ xymon_group }}"
+    home: "{{ xymon_server_home }}"
+    shell: /bin/bash
+    system: yes
+    create_home: yes
+
+- name: Create Xymon server directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ xymon_user }}"
+    group: "{{ xymon_group }}"
+    mode: '0755'
+  loop:
+    - "{{ xymon_server_home }}"
+    - "{{ xymon_server_config_dir }}"
+    - "{{ xymon_server_data_dir }}"
+    - "{{ xymon_server_web_dir }}"
+    - "{{ xymon_server_log_dir }}"
+
+- name: Download Xymon server source
+  get_url:
+    url: "{{ xymon_server_source_url }}"
+    dest: "/tmp/{{ xymon_server_source_name }}"
+    mode: '0644'
+  when: xymon_install_from_source | bool
+
+- name: Extract Xymon server source
+  unarchive:
+    src: "/tmp/{{ xymon_server_source_name }}"
+    dest: /tmp
+    remote_src: yes
+    owner: "{{ xymon_user }}"
+    group: "{{ xymon_group }}"
+  when: xymon_install_from_source | bool
+
+- name: Configure Xymon server build
+  template:
+    src: xymon_build.conf.j2
+    dest: "/tmp/{{ xymon_server_source_dir }}/build.conf"
+    owner: "{{ xymon_user }}"
+    group: "{{ xymon_group }}"
+    mode: '0644'
+  when: xymon_install_from_source | bool
+
+- name: Build and install Xymon server
+  command: "{{ item }}"
+  args:
+    chdir: "/tmp/{{ xymon_server_source_dir }}"
+  become_user: "{{ xymon_user }}"
+  loop:
+    - make
+    - make install
+  when: xymon_install_from_source | bool
+  notify: restart xymon server
+
+- name: Configure Xymon server main configuration
+  template:
+    src: xymonserver.cfg.j2
+    dest: "{{ xymon_server_config_dir }}/xymonserver.cfg"
+    owner: "{{ xymon_user }}"
+    group: "{{ xymon_group }}"
+    mode: '0644'
+    backup: yes
+  notify: restart xymon server
+
+- name: Configure Xymon hosts file
+  template:
+    src: xymon_hosts.j2
+    dest: "{{ xymon_server_config_dir }}/hosts.cfg"
+    owner: "{{ xymon_user }}"
+    group: "{{ xymon_group }}"
+    mode: '0644'
+    backup: yes
+  notify: reload xymon config
+
+- name: Configure Xymon server web interface
+  template:
+    src: xymon_apache.conf.j2
+    dest: "{{ apache_config_dir }}/xymon.conf"
+    mode: '0644'
+  notify: restart apache
+  when: xymon_enable_web_interface | bool
+
+- name: Create Xymon server systemd service
+  template:
+    src: xymon-server.service.j2
+    dest: /etc/systemd/system/xymon-server.service
+    mode: '0644'
+  notify:
+    - reload systemd
+    - restart xymon server
+  when: ansible_service_mgr == "systemd"
+
+- name: Start and enable Xymon server service
+  service:
+    name: "{{ xymon_server_service }}"
+    state: started
+    enabled: yes
+
+- name: Configure Xymon server cron jobs
+  cron:
+    name: "{{ item.name }}"
+    minute: "{{ item.minute | default('*') }}"
+    hour: "{{ item.hour | default('*') }}"
+    day: "{{ item.day | default('*') }}"
+    month: "{{ item.month | default('*') }}"
+    weekday: "{{ item.weekday | default('*') }}"
+    user: "{{ xymon_user }}"
+    job: "{{ item.job }}"
+    state: present
+  loop:
+    - name: "Xymon server maintenance"
+      minute: "0"
+      hour: "2"
+      job: "{{ xymon_server_home }}/bin/xymon-maint.sh"
+    - name: "Xymon log rotation"
+      minute: "30"
+      hour: "1"
+      job: "{{ xymon_server_home }}/bin/xymon-logrotate.sh"
+
+- name: Test Xymon server status
+  uri:
+    url: "http://{{ ansible_default_ipv4.address }}:{{ xymon_web_port }}/xymon-cgi/xymon.sh"
+    method: GET
+    return_content: yes
+  register: xymon_web_test
+  failed_when: false
+  when: xymon_enable_web_interface | bool

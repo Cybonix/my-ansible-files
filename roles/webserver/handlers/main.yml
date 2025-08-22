@@ -1,0 +1,22 @@
+---
+# Handlers for webserver role
+
+- name: restart webserver
+  service:
+    name: "{{ webserver_service[webserver_type] }}"
+    state: restarted
+
+- name: reload webserver
+  service:
+    name: "{{ webserver_service[webserver_type] }}"
+    state: reloaded
+
+- name: restart apache
+  service:
+    name: "{{ webserver_service.apache }}"
+    state: restarted
+
+- name: restart nginx
+  service:
+    name: "{{ webserver_service.nginx }}"
+    state: restarted

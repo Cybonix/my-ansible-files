@@ -1,0 +1,55 @@
+---
+# RedHat/CentOS/Rocky Linux/AlmaLinux specific variables for monitoring
+
+# Package prerequisites
+monitoring_prerequisites:
+  - epel-release
+  - redhat-lsb-core
+  - openssl
+  - openssl-devel
+  - gcc
+  - make
+  - autoconf
+  - wget
+  - curl
+
+# Xymon client package for RedHat family
+xymon_client_package_url: "http://xymon.com/xymon/client/xymonclient-4.3.28-2.el8.x86_64.rpm"
+xymon_client_package_name: "xymonclient-4.3.28-2.el8.x86_64.rpm"
+
+# Xymon server packages
+xymon_server_packages:
+  - gcc
+  - gcc-c++
+  - make
+  - rrdtool-devel
+  - openssl-devel
+  - pcre-devel
+  - httpd-devel
+  - libc-client-devel
+  - krb5-devel
+  - net-snmp-devel
+
+# Service management
+monitoring_service_manager: systemd
+
+# Apache configuration
+apache_config_dir: /etc/httpd/conf.d
+apache_service: httpd
+
+# Log directories
+system_log_dir: /var/log
+monitoring_log_dir: /var/log/monitoring
+
+# Firewall service
+firewall_service: firewalld
+
+# User and group settings
+monitoring_user: xymon
+monitoring_group: xymon
+
+# Prometheus specific packages
+prometheus_prerequisites:
+  - tar
+  - gzip
+  - systemd

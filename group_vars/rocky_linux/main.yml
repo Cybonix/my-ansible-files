@@ -1,0 +1,41 @@
+---
+# Rocky Linux specific variables
+
+# Package manager and repositories
+package_manager: dnf
+enable_epel: true
+enable_powertools: true
+
+# Firewall
+firewall_service: firewalld
+
+# SELinux settings
+selinux_state: enforcing
+selinux_policy: targeted
+
+# System packages specific to Rocky Linux
+system_packages:
+  - epel-release
+  - dnf-utils
+  - redhat-lsb-core
+  - policycoreutils-python-utils
+  - setroubleshoot-server
+
+# Network time
+ntp_service: chronyd
+ntp_config_file: /etc/chrony.conf
+
+# Log files
+system_log_path: /var/log
+audit_log_path: /var/log/audit
+
+# User and group management
+default_shell: /bin/bash
+home_directory_mode: "0750"
+
+# Kernel parameters
+kernel_parameters:
+  - name: net.ipv4.ip_forward
+    value: 0
+  - name: net.ipv4.conf.all.rp_filter
+    value: 1

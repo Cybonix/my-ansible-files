@@ -1,0 +1,95 @@
+---
+# Web Server Role - Main Tasks
+# Supports both Apache and Nginx based on the webserver_type variable
+
+- name: Include OS-specific variables
+  include_vars: "{{ ansible_os_family }}.yml"
+
+- name: Install web server package
+  package:
+    name: "{{ webserver_packages[webserver_type] }}"
+    state: present
+  notify: 
+    - restart webserver
+
+- name: Create web root directory
+  file:
+    path: "{{ webserver_document_root }}"
+    state: directory
+    owner: "{{ webserver_user }}"
+    group: "{{ webserver_group }}"
+    mode: '0755'
+
+- name: Deploy default index page
+  template:
+    src: index.html.j2
+    dest: "{{ webserver_document_root }}/index.html"
+    owner: "{{ webserver_user }}"
+    group: "{{ webserver_group }}"
+    mode: '0644'
+  when: webserver_deploy_default_page | bool
+
+- name: Configure Apache virtual host
+  template:
+    src: apache_vhost.conf.j2
+    dest: "{{ apache_vhost_path }}/{{ webserver_servername }}.conf"
+    backup: yes
+  when: webserver_type == "apache"
+  notify: restart webserver
+
+- name: Configure Nginx site
+  template:
+    src: nginx_site.conf.j2
+    dest: "{{ nginx_sites_available }}/{{ webserver_servername }}"
+    backup: yes
+  when: webserver_type == "nginx"
+  notify: restart webserver
+
+- name: Enable Nginx site
+  file:
+    src: "{{ nginx_sites_available }}/{{ webserver_servername }}"
+    dest: "{{ nginx_sites_enabled }}/{{ webserver_servername }}"
+    state: link
+  when: webserver_type == "nginx"
+  notify: restart webserver
+
+- name: Remove default Nginx site
+  file:
+    path: "{{ nginx_sites_enabled }}/default"
+    state: absent
+  when: webserver_type == "nginx" and webserver_remove_default | bool
+  notify: restart webserver
+
+- name: Start and enable web server service
+  service:
+    name: "{{ webserver_service[webserver_type] }}"
+    state: started
+    enabled: yes
+
+- name: Configure firewall for HTTP
+  firewalld:
+    service: http
+    permanent: yes
+    state: enabled
+    immediate: yes
+  when: ansible_os_family == "RedHat" and webserver_configure_firewall | bool
+  ignore_errors: yes
+
+- name: Configure firewall for HTTPS
+  firewalld:
+    service: https
+    permanent: yes
+    state: enabled
+    immediate: yes
+  when: ansible_os_family == "RedHat" and webserver_configure_firewall | bool and webserver_enable_ssl | bool
+  ignore_errors: yes
+
+- name: Configure UFW for HTTP/HTTPS (Ubuntu)
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+  loop:
+    - "80"
+    - "443"
+  when: ansible_os_family == "Debian" and webserver_configure_firewall | bool
+  ignore_errors: yes

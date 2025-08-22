@@ -1,0 +1,68 @@
+---
+# RedHat/CentOS/Rocky Linux/AlmaLinux specific variables for DNS
+
+# Package names
+dns_packages:
+  - bind
+  - bind-utils
+  - bind-chroot
+
+dns_utils_packages:
+  - bind-utils
+
+# Service configuration
+dns_service: named-chroot
+dns_standard_service: named
+
+# User and group
+dns_user: named
+dns_group: named
+
+# Directory paths
+dns_config_dir: /etc/named
+dns_zone_dir: /var/named
+dns_data_dir: /var/named/data
+dns_log_dir: /var/log/named
+dns_home_dir: /var/named
+
+# Chroot specific paths
+dns_chroot_dir: /var/named/chroot
+dns_chroot_package: bind-chroot
+dns_chroot_setup_script: /usr/libexec/setup-named-chroot.sh
+
+# Configuration files
+dns_main_config: /etc/named.conf
+dns_chroot_main_config: /var/named/chroot/etc/named.conf
+
+# PowerDNS packages for RedHat
+powerdns_packages:
+  - pdns
+  - pdns-tools
+
+powerdns_backend_packages:
+  bind:
+    - pdns-backend-bind
+  mysql:
+    - pdns-backend-mysql
+  postgresql:
+    - pdns-backend-postgresql
+  sqlite:
+    - pdns-backend-sqlite3
+
+# PowerDNS paths
+powerdns_config_dir: /etc/pdns
+powerdns_zone_dir: /etc/pdns/zones
+powerdns_service: pdns
+powerdns_user: pdns
+powerdns_group: pdns
+
+# System paths
+resolv_conf: /etc/resolv.conf
+systemd_dir: /etc/systemd/system
+
+# SELinux contexts
+selinux_dns_contexts:
+  - { path: "/var/named(/.*)?", setype: "named_zone_t" }
+  - { path: "/etc/named(/.*)?", setype: "named_conf_t" }
+  - { path: "/var/log/named(/.*)?", setype: "named_log_t" }
+  - { path: "/var/named/chroot(/.*)?", setype: "named_zone_t" }

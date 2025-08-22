@@ -1,0 +1,51 @@
+---
+# Ubuntu specific variables
+
+# Package manager and repositories
+package_manager: apt
+enable_universe: true
+enable_multiverse: false
+
+# Firewall
+firewall_service: ufw
+
+# AppArmor settings
+apparmor_enabled: true
+
+# System packages specific to Ubuntu
+system_packages:
+  - software-properties-common
+  - apt-transport-https
+  - ca-certificates
+  - gnupg
+  - lsb-release
+  - curl
+
+# Network time
+ntp_service: systemd-timesyncd
+ntp_config_file: /etc/systemd/timesyncd.conf
+
+# Log files
+system_log_path: /var/log
+journal_path: /var/log/journal
+
+# User and group management
+default_shell: /bin/bash
+home_directory_mode: "0755"
+
+# Unattended upgrades
+unattended_upgrades_enabled: true
+unattended_upgrades_automatic_reboot: false
+unattended_upgrades_time: "06:00"
+
+# Snap packages (Ubuntu specific)
+snap_packages:
+  - core
+  - snapd
+
+# Kernel parameters
+kernel_parameters:
+  - name: net.ipv4.ip_forward
+    value: 0
+  - name: net.ipv4.conf.all.rp_filter
+    value: 1

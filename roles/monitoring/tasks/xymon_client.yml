@@ -1,0 +1,102 @@
+---
+# Xymon Client Installation and Configuration
+
+- name: Download Xymon client package
+  get_url:
+    url: "{{ xymon_client_package_url }}"
+    dest: "/tmp/{{ xymon_client_package_name }}"
+    mode: '0644'
+    timeout: 30
+  register: xymon_download
+
+- name: Install Xymon client from RPM (RedHat)
+  yum:
+    name: "/tmp/{{ xymon_client_package_name }}"
+    state: present
+    disable_gpg_check: yes
+  when: ansible_os_family == "RedHat"
+
+- name: Install Xymon client from DEB (Debian)
+  apt:
+    deb: "/tmp/{{ xymon_client_package_name }}"
+    state: present
+  when: ansible_os_family == "Debian"
+
+- name: Create Xymon configuration directory
+  file:
+    path: "{{ xymon_client_config_dir }}"
+    state: directory
+    owner: "{{ xymon_user }}"
+    group: "{{ xymon_group }}"
+    mode: '0755'
+
+- name: Configure Xymon client
+  template:
+    src: xymon_client.conf.j2
+    dest: "{{ xymon_client_config_dir }}/xymonclient.cfg"
+    owner: "{{ xymon_user }}"
+    group: "{{ xymon_group }}"
+    mode: '0644'
+    backup: yes
+  notify: restart xymon client
+
+- name: Create custom Xymon client scripts directory
+  file:
+    path: "{{ xymon_client_scripts_dir }}"
+    state: directory
+    owner: "{{ xymon_user }}"
+    group: "{{ xymon_group }}"
+    mode: '0755'
+
+- name: Deploy custom monitoring scripts
+  template:
+    src: "{{ item }}.j2"
+    dest: "{{ xymon_client_scripts_dir }}/{{ item }}"
+    owner: "{{ xymon_user }}"
+    group: "{{ xymon_group }}"
+    mode: '0755'
+  loop: "{{ xymon_custom_scripts | default([]) }}"
+  notify: restart xymon client
+
+- name: Configure Xymon client systemd service
+  template:
+    src: xymon-client.service.j2
+    dest: /etc/systemd/system/xymon-client.service
+    mode: '0644'
+  notify:
+    - reload systemd
+    - restart xymon client
+  when: ansible_service_mgr == "systemd"
+
+- name: Start and enable Xymon client service
+  service:
+    name: "{{ xymon_client_service }}"
+    state: started
+    enabled: yes
+
+- name: Configure Xymon client cron jobs
+  cron:
+    name: "{{ item.name }}"
+    minute: "{{ item.minute | default('*') }}"
+    hour: "{{ item.hour | default('*') }}"
+    day: "{{ item.day | default('*') }}"
+    month: "{{ item.month | default('*') }}"
+    weekday: "{{ item.weekday | default('*') }}"
+    user: "{{ xymon_user }}"
+    job: "{{ item.job }}"
+    state: present
+  loop: "{{ xymon_cron_jobs | default([]) }}"
+
+- name: Create Xymon client log directory
+  file:
+    path: "{{ xymon_client_log_dir }}"
+    state: directory
+    owner: "{{ xymon_user }}"
+    group: "{{ xymon_group }}"
+    mode: '0755'
+
+- name: Test Xymon client connectivity
+  command: "{{ xymon_client_bin_dir }}/xymon {{ xymon_server_address }} 'status {{ ansible_hostname }}.conn green Test connection from Ansible'"
+  register: xymon_test
+  failed_when: false
+  changed_when: false
